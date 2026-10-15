@@ -1,0 +1,38 @@
+/**
+ * Design tokens van UurWijzer.
+ *
+ * Alle kleuren, randen en typografie staan hier centraal, zodat de vormgeving
+ * later eenvoudig kan worden aangepast zonder de componenten te wijzigen.
+ * Het thema wordt gezet via het `data-theme`-attribuut op <html>.
+ */
+
+:root {
+  --uw-canvas: #ffffff;
+  --uw-surface: #f4f5f7;
+  --uw-ink: #1b1c1e;
+  --uw-muted: #5a5f66;
+  --uw-line: #d3d6db;
+  --uw-accent: #35506e;
+  --uw-accent-ink: #ffffff;
+  --uw-positive: #1f6f43;
+  --uw-negative: #8f2f2f;
+
+  --uw-radius: 0.5rem;
+  --uw-space: 1rem;
+  --uw-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --uw-font-size-base: 1rem;
+  --uw-font-size-small: 0.875rem;
+  --uw-focus-ring: 2px;
+}
+
+[data-theme='dark'] {
+  --uw-canvas: #17181a;
+  --uw-surface: #212326;
+  --uw-ink: #f2f3f5;
+  --uw-muted: #a9aeb6;
+  --uw-line: #3a3d42;
+  --uw-accent: #8fb4dd;
+  --uw-accent-ink: #14161a;
+  --uw-positive: #7fd0a2;
+  --uw-negative: #f0a1a1;
+}
