@@ -52,7 +52,9 @@ watch(route, () => guardRoute(store), { deep: true })
     <DataIssuesNotice v-if="showIssues" :issues="issues" @dismiss="issuesDismissed = true" />
 
     <AppHeader v-if="showShell" :menu-open="menuOpen" @open-menu="menuOpen = true" />
-    <MenuDrawer :open="menuOpen" @close="menuOpen = false" />
+    <Transition name="uw-drawer">
+      <MenuDrawer v-if="menuOpen" :open="true" @close="menuOpen = false" />
+    </Transition>
 
     <main>
       <DashboardPage v-if="route.name === 'dashboard'" />

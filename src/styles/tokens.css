@@ -7,16 +7,15 @@
  */
 
 :root {
-  --uw-canvas: #ffffff;
-  --uw-surface: #f4f5f7;
-  --uw-ink: #1b1c1e;
-  --uw-muted: #5a5f66;
-  --uw-line: #d3d6db;
-  --uw-accent: #35506e;
+  --uw-canvas: #f3f5f7;
+  --uw-surface: #e7eaed;
+  --uw-ink: #16191f;
+  --uw-muted: #50545b;
+  --uw-line: #b7bcc4;
+  --uw-accent: #2563eb;
   --uw-accent-ink: #ffffff;
   --uw-positive: #1f6f43;
   --uw-negative: #8f2f2f;
-
   --uw-radius: 0.5rem;
   --uw-space: 1rem;
   --uw-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
@@ -26,13 +25,13 @@
 }
 
 [data-theme='dark'] {
-  --uw-canvas: #17181a;
-  --uw-surface: #212326;
-  --uw-ink: #f2f3f5;
-  --uw-muted: #a9aeb6;
-  --uw-line: #3a3d42;
-  --uw-accent: #8fb4dd;
-  --uw-accent-ink: #14161a;
+  --uw-canvas: #111317;
+  --uw-surface: #1b1d22;
+  --uw-ink: #f3f4f6;
+  --uw-muted: #9ba1a8;
+  --uw-line: #2f3238;
+  --uw-accent: #60a5fa;
+  --uw-accent-ink: #0a0b0d;
   --uw-positive: #7fd0a2;
   --uw-negative: #f0a1a1;
 }

@@ -48,10 +48,10 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div v-if="props.open" class="uw-dialog-backdrop" @click.self="emit('close')">
+  <div class="uw-dialog-backdrop uw-dialog-backdrop--drawer" @click.self="emit('close')">
     <div
       ref="dialog"
-      class="uw-dialog"
+      class="uw-dialog uw-dialog--drawer"
       role="dialog"
       aria-modal="true"
       aria-label="Menu"
