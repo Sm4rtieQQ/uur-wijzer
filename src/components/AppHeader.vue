@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import { useAppStore } from '../state/appStore'
 import { navigate } from '../router/router'
+import BannerDial from './BannerDial.vue'
 
 const props = defineProps<{
   menuOpen: boolean
@@ -17,7 +18,9 @@ const companyName = computed(() => store.activeProfile.value?.name ?? '')
 </script>
 
 <template>
-  <header class="uw-header">
+  <header class="uw-header" name="appHeader" id="appHeader">
+    <BannerDial />
+
     <button
       type="button"
       class="uw-header-title"
@@ -25,7 +28,7 @@ const companyName = computed(() => store.activeProfile.value?.name ?? '')
       @click="navigate({ name: 'profiles' })"
     >
       <span class="uw-eyebrow">{{ username }}</span>
-      <strong>{{ companyName }}</strong>
+      <strong class="uw-profile-title">{{ companyName }}</strong>
     </button>
 
     <button

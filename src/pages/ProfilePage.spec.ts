@@ -6,7 +6,8 @@ import { resetAppStoreForTests, useAppStore, type AppStore } from '../state/appS
 import { currentRoute } from '../router/router'
 import { exportToCsv } from '../services/csv'
 import { createEmptyData } from '../storage/parseStoredData'
-import { findButton, mountPage, requireElement, submitForm } from '../testing/testHelpers'
+import { ACCENT_COLOR_OPTIONS } from '../domain/defaults'
+import { findButton, mountPage, requireElement, submitForm, expectUniqueContainerIds, requireContainer } from '../testing/testHelpers'
 import type { AppData } from '../domain/types'
 
 const now = new Date(2026, 9, 15, 10, 0)
@@ -30,7 +31,7 @@ function seedProfile(name = 'Bakkerij Jansen') {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
   })
 }
 
@@ -90,9 +91,76 @@ describe('ProfilePage', () => {
     await findButton(wrapper, 'Nieuw profiel').trigger('click')
     expect(currentRoute.value).toEqual({ name: 'new-profile' })
   })
+
+  it('geeft de profielpagina en de profielitems een name en id', () => {
+    store.setUsername('Martin')
+    const profile = seedProfile()
+    const wrapper = mountPage(ProfilePage)
+
+    for (const containerId of ['profilesPage', 'profilesHeader', 'profileList', `profile-${profile.id}`]) {
+      requireContainer(wrapper, containerId)
+    }
+    expectUniqueContainerIds(wrapper)
+  })
+
+  it('toont boven de profiellijst het label "Selecteer een profiel"', () => {
+    store.setUsername('Martin')
+    seedProfile()
+    const wrapper = mountPage(ProfilePage)
+
+    expect(wrapper.text()).toContain('Selecteer een profiel')
+  })
+
+  it('toont het klokdecor in de banner van de profielpagina', () => {
+    store.setUsername('Martin')
+    seedProfile()
+    const wrapper = mountPage(ProfilePage)
+
+    const dial = requireElement(wrapper, '.uw-banner-dial')
+    expect(dial.attributes('aria-hidden')).toBe('true')
+  })
 })
 
 describe('NewProfilePage', () => {
+  it('geeft de nieuw-profielpagina containers een name en id', () => {
+    const wrapper = mountPage(NewProfilePage)
+
+    for (const containerId of ['newProfilePage', 'newProfileHeader', 'newProfileForm', 'profileImport']) {
+      requireContainer(wrapper, containerId)
+    }
+    expectUniqueContainerIds(wrapper)
+  })
+
+  it('toont alle negen accentkleuren als keuzerondjes zonder zichtbare tekst', () => {
+    const wrapper = mountPage(NewProfilePage)
+
+    expect(ACCENT_COLOR_OPTIONS).toHaveLength(9)
+    const swatches = wrapper.findAll('.uw-swatch')
+    expect(swatches).toHaveLength(ACCENT_COLOR_OPTIONS.length)
+
+    const inputs = wrapper.findAll('input[name="profile-accent"]')
+    expect(inputs.map((input) => input.attributes('aria-label'))).toEqual(
+      ACCENT_COLOR_OPTIONS.map((option) => option.label),
+    )
+    for (const option of ACCENT_COLOR_OPTIONS) {
+      expect(requireElement(wrapper, `#profile-accent-${option.value.slice(1)}`).exists()).toBe(true)
+    }
+    // De kleurnamen staan niet meer als zichtbare tekst in het formulier.
+    for (const option of ACCENT_COLOR_OPTIONS) {
+      expect(wrapper.text()).not.toContain(option.label)
+    }
+  })
+
+  it('geeft elke kleurtegel zijn eigen kleur mee voor de selectie-outline', () => {
+    const wrapper = mountPage(NewProfilePage)
+
+    for (const option of ACCENT_COLOR_OPTIONS) {
+      const dot = requireElement(wrapper, `#profile-accent-${option.value.slice(1)} + .uw-swatch-dot`)
+      expect(dot.attributes('style')).toContain(`--uw-swatch-color: ${option.value}`)
+      expect(dot.attributes('style')).toContain(option.value)
+    }
+  })
+
   it('toont Nederlandse foutmeldingen bij lege verplichte velden', async () => {
     const wrapper = mountPage(NewProfilePage)
 
@@ -110,13 +178,13 @@ describe('NewProfilePage', () => {
     await requireElement(wrapper, '#profile-contract').setValue('32,5')
     await requireElement(wrapper, '#profile-start').setValue('08:00')
     await requireElement(wrapper, '#profile-end').setValue('16:30')
-    await requireElement(wrapper, '#profile-theme').setValue('dark')
+    await requireElement(wrapper, '#profile-accent-7c3aed').setValue(true)
     await submitForm(wrapper)
 
     expect(store.state.data.profiles).toHaveLength(1)
     expect(store.state.data.profiles[0]?.name).toBe('Bakkerij Jansen')
     expect(store.state.data.profiles[0]?.contractMinutes).toBe(1950)
-    expect(store.state.data.profiles[0]?.theme).toBe('dark')
+    expect(store.state.data.profiles[0]?.accentColor).toBe('#7c3aed')
     expect(currentRoute.value).toEqual({ name: 'dashboard' })
   })
 
@@ -143,7 +211,7 @@ describe('NewProfilePage', () => {
           contractMinutes: 960,
           defaultStartTime: '10:00',
           defaultEndTime: '14:00',
-          theme: 'light',
+          accentColor: '#2563eb',
           reminders: { enabled: false, days: [], time: '09:00' },
         },
       ],

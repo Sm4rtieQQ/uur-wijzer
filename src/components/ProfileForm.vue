@@ -1,15 +1,14 @@
 <script setup lang="ts">
 import { reactive, ref } from 'vue'
-import { THEME_OPTIONS } from '../domain/defaults'
+import { ACCENT_COLOR_OPTIONS } from '../domain/defaults'
 import { validateProfileInput, type ValidatedProfile } from '../domain/validation'
-import type { ThemeId } from '../domain/types'
 
 const props = defineProps<{
   initialName: string
   initialContractHours: string
   initialStartTime: string
   initialEndTime: string
-  initialTheme: ThemeId
+  initialAccentColor: string
   submitLabel: string
 }>()
 
@@ -23,7 +22,7 @@ const form = reactive({
   contractHours: props.initialContractHours,
   defaultStartTime: props.initialStartTime,
   defaultEndTime: props.initialEndTime,
-  theme: props.initialTheme,
+  accentColor: props.initialAccentColor,
 })
 
 const errors = ref<Partial<Record<string, string>>>({})
@@ -34,7 +33,7 @@ function onSubmit(): void {
     contractHours: form.contractHours,
     defaultStartTime: form.defaultStartTime,
     defaultEndTime: form.defaultEndTime,
-    theme: form.theme,
+    accentColor: form.accentColor,
   })
 
   if (!result.ok) {
@@ -48,7 +47,7 @@ function onSubmit(): void {
 </script>
 
 <template>
-  <form class="uw-stack" novalidate @submit.prevent="onSubmit">
+  <form class="uw-stack" name="profileForm" id="profileForm" novalidate @submit.prevent="onSubmit">
     <div class="uw-field">
       <label for="profile-name">Naam van werkgever of bedrijf</label>
       <input id="profile-name" v-model="form.name" class="uw-input" type="text" autocomplete="organization" />
@@ -80,13 +79,28 @@ function onSubmit(): void {
       <p v-if="errors.defaultEndTime" class="uw-field-error">{{ errors.defaultEndTime }}</p>
     </div>
 
-    <div class="uw-field">
-      <label for="profile-theme">Profiel-thema</label>
-      <select id="profile-theme" v-model="form.theme" class="uw-select">
-        <option v-for="theme in THEME_OPTIONS" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
-      </select>
-      <p v-if="errors.theme" class="uw-field-error">{{ errors.theme }}</p>
-    </div>
+    <fieldset class="uw-field" name="accentColor" id="accentColor" style="border: 0; padding: 0; margin: 0">
+      <legend class="uw-legend">Accentkleur</legend>
+      <div class="uw-swatches">
+        <label v-for="option in ACCENT_COLOR_OPTIONS" :key="option.value" class="uw-swatch">
+          <input
+            :id="`profile-accent-${option.value.slice(1)}`"
+            v-model="form.accentColor"
+            class="uw-swatch-input"
+            type="radio"
+            name="profile-accent"
+            :value="option.value"
+            :aria-label="option.label"
+          />
+          <span
+            class="uw-swatch-dot"
+            :style="{ backgroundColor: option.value, '--uw-swatch-color': option.value }"
+            aria-hidden="true"
+          ></span>
+        </label>
+      </div>
+      <p v-if="errors.accentColor" class="uw-field-error">{{ errors.accentColor }}</p>
+    </fieldset>
 
     <div class="uw-row" style="justify-content: flex-end">
       <button type="button" class="uw-button" @click="emit('cancel')">Annuleren</button>

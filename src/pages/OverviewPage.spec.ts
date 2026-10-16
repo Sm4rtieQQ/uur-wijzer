@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import OverviewPage from './OverviewPage.vue'
 import { resetAppStoreForTests, useAppStore, type AppStore } from '../state/appStore'
 import { currentRoute } from '../router/router'
-import { findButton, mountPage } from '../testing/testHelpers'
+import { findButton, mountPage, requireElement, expectUniqueContainerIds, requireContainer } from '../testing/testHelpers'
 
 const now = new Date(2026, 9, 15, 10, 0)
 let store: AppStore
@@ -26,7 +26,7 @@ function seedProfile() {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
   })
 }
 
@@ -102,6 +102,40 @@ describe('OverviewPage', () => {
 
     const wrapper = mountPage(OverviewPage)
     expect(wrapper.text()).toContain('Vakantie')
+  })
+
+  it('toont een Ziek-badge wanneer er ziekte-uren zijn geregistreerd', () => {
+    const profile = seedProfile()
+    store.setWeekSick(profile.id, { isoYear: 2026, isoWeek: 42 }, 240)
+
+    const wrapper = mountPage(OverviewPage)
+    expect(wrapper.text()).toContain('Ziek')
+  })
+
+  it('toont geen Ziek-badge zonder ziekte-uren', () => {
+    seedProfile()
+    const wrapper = mountPage(OverviewPage)
+    expect(wrapper.text()).not.toContain('Ziek')
+  })
+
+  it('toont de datum van een week in de kleinere weekmaat', () => {
+    seedProfile()
+    const wrapper = mountPage(OverviewPage)
+
+    const date = requireElement(wrapper, '.uw-week-date')
+    expect(date.text()).toBe('12-10-2026 t/m 18-10-2026')
+  })
+
+  it('geeft elke weekcontainer een unieke name en id', () => {
+    const profile = seedProfile()
+    store.addRegistration(profile.id, { date: '2026-10-12', startTime: '08:00', endTime: '12:00' })
+    store.addRegistration(profile.id, { date: '2026-10-05', startTime: '08:00', endTime: '12:00' })
+
+    const wrapper = mountPage(OverviewPage)
+
+    requireContainer(wrapper, 'week-2026-42')
+    requireContainer(wrapper, 'week-2026-41')
+    expectUniqueContainerIds(wrapper)
   })
 
   it('laat eerdere ISO-weekjaren kiezen', async () => {

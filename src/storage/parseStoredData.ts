@@ -1,4 +1,4 @@
-import { DEFAULT_END_TIME, DEFAULT_REMINDER_TIME, DEFAULT_START_TIME, DEFAULT_THEME } from '../domain/defaults'
+import { ACCENT_COLOR_OPTIONS, DEFAULT_ACCENT_COLOR, DEFAULT_END_TIME, DEFAULT_REMINDER_TIME, DEFAULT_START_TIME, DEFAULT_THEME } from '../domain/defaults'
 import { isValidIsoDate } from '../domain/date'
 import { isValidIsoWeek } from '../domain/isoWeek'
 import { elapsedMinutes, isValidTimeOfDay } from '../domain/time'
@@ -18,6 +18,7 @@ export function createEmptyData(): AppData {
   return {
     schemaVersion: SCHEMA_VERSION,
     username: '',
+    theme: DEFAULT_THEME,
     profiles: [],
     registrations: [],
     weeks: [],
@@ -52,6 +53,14 @@ function readBoolean(value: unknown, fallback: boolean): boolean {
 
 function readTheme(value: unknown): ThemeId {
   return value === 'light' || value === 'dark' || value === 'system' ? value : DEFAULT_THEME
+}
+
+/** Leest een accentkleur; onbekende of ongeldige waarden vallen terug op de standaard. */
+function readAccentColor(value: unknown): string {
+  if (typeof value !== 'string') return DEFAULT_ACCENT_COLOR
+  const normalized = value.trim().toLowerCase()
+  const isKnown = ACCENT_COLOR_OPTIONS.some((option) => option.value === normalized)
+  return isKnown ? normalized : DEFAULT_ACCENT_COLOR
 }
 
 function parseReminderSettings(value: unknown): ReminderSettings {
@@ -98,7 +107,7 @@ function parseProfile(value: unknown, issues: string[]): Profile | null {
     contractMinutes: readNonNegativeInteger(record['contractMinutes'], 0),
     defaultStartTime: timesValid ? defaultStartTime : DEFAULT_START_TIME,
     defaultEndTime: timesValid ? defaultEndTime : DEFAULT_END_TIME,
-    theme: readTheme(record['theme']),
+    accentColor: readAccentColor(record['accentColor']),
     reminders: parseReminderSettings(record['reminders']),
   }
 }
@@ -146,6 +155,7 @@ function parseWeekRecord(value: unknown, issues: string[]): WeekRecord | null {
     isoWeek,
     contractMinutes: readNonNegativeInteger(record['contractMinutes'], 0),
     isVacation: readBoolean(record['isVacation'], false),
+    sickMinutes: readNonNegativeInteger(record['sickMinutes'], 0),
   }
 }
 
@@ -169,6 +179,9 @@ function migrate(raw: Record<string, unknown>, issues: string[]): Record<string,
   // Versie 1 → 2: pauze vervalt. De velden `defaultBreakMinutes` (profiel) en
   // `breakMinutes` (registratie) worden bij het lezen genegeerd; de gewerkte
   // tijd is vanaf nu de verstreken tijd tussen start en eind.
+  // Versie 2 → 3: het thema verhuist van het profiel naar de app (`theme`).
+  // Het profielthema wordt bij het lezen genegeerd en het app-thema valt terug
+  // op de standaard (`system`); ziekte-uren en accentkleur krijgen defaults.
   return { ...raw, schemaVersion: SCHEMA_VERSION }
 }
 
@@ -253,6 +266,7 @@ export function parseStoredData(raw: string | null): ParsedStoredData {
     data: {
       schemaVersion: SCHEMA_VERSION,
       username: readString(migrated['username'], '').trim(),
+      theme: readTheme(migrated['theme']),
       profiles,
       registrations,
       weeks,

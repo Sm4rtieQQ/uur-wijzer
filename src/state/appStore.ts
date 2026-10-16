@@ -20,7 +20,7 @@ export interface ProfileChanges {
   contractMinutes?: number
   defaultStartTime?: string
   defaultEndTime?: string
-  theme?: ThemeId
+  accentColor?: string
   reminders?: ReminderSettings
 }
 
@@ -48,6 +48,7 @@ export interface AppStore {
   state: AppStoreState
   activeProfile: ComputedRef<Profile | null>
   setUsername(username: string): void
+  setTheme(theme: ThemeId): void
   createProfile(input: NewProfileData): Profile
   updateProfile(profileId: string, changes: ProfileChanges): Profile | null
   deleteProfile(profileId: string): void
@@ -56,6 +57,7 @@ export interface AppStore {
   ensureWeeksForYear(profileId: string, isoYear: number): void
   setWeekContract(profileId: string, ref: IsoWeekRef, contractMinutes: number): void
   setWeekVacation(profileId: string, ref: IsoWeekRef, isVacation: boolean): void
+  setWeekSick(profileId: string, ref: IsoWeekRef, sickMinutes: number): void
   addRegistration(profileId: string, changes: RegistrationChanges): Registration
   updateRegistration(registrationId: string, changes: RegistrationChanges): Registration | null
   removeRegistration(registrationId: string): void
@@ -70,7 +72,7 @@ export interface NewProfileData {
   contractMinutes: number
   defaultStartTime: string
   defaultEndTime: string
-  theme: ThemeId
+  accentColor: string
   reminders?: ReminderSettings
 }
 
@@ -128,6 +130,7 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
       isoWeek: ref.isoWeek,
       contractMinutes: profile?.contractMinutes ?? 0,
       isVacation: false,
+      sickMinutes: 0,
     }
     state.data.weeks.push(record)
     persist()
@@ -141,7 +144,7 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
       contractMinutes: input.contractMinutes,
       defaultStartTime: input.defaultStartTime,
       defaultEndTime: input.defaultEndTime,
-      theme: input.theme,
+      accentColor: input.accentColor,
       reminders: input.reminders ?? defaultReminders(),
     }
     state.data.profiles.push(profile)
@@ -158,7 +161,7 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
     if (changes.name !== undefined) profile.name = changes.name
     if (changes.defaultStartTime !== undefined) profile.defaultStartTime = changes.defaultStartTime
     if (changes.defaultEndTime !== undefined) profile.defaultEndTime = changes.defaultEndTime
-    if (changes.theme !== undefined) profile.theme = changes.theme
+    if (changes.accentColor !== undefined) profile.accentColor = changes.accentColor
     if (changes.reminders !== undefined) profile.reminders = changes.reminders
     if (changes.contractMinutes !== undefined) profile.contractMinutes = changes.contractMinutes
 
@@ -227,6 +230,12 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
     persist()
   }
 
+  function setWeekSick(profileId: string, ref: IsoWeekRef, sickMinutes: number): void {
+    const week = ensureWeek(profileId, ref)
+    week.sickMinutes = Math.max(0, Math.round(sickMinutes))
+    persist()
+  }
+
   function addRegistration(profileId: string, changes: RegistrationChanges): Registration {
     const registration: Registration = {
       id: createId('registration'),
@@ -288,6 +297,10 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
       state.data.username = username.trim()
       persist()
     },
+    setTheme: (theme: ThemeId) => {
+      state.data.theme = theme
+      persist()
+    },
     createProfile,
     updateProfile,
     deleteProfile,
@@ -296,6 +309,7 @@ export function createAppStore(storage: StorageLike | null = getDefaultStorage()
     ensureWeeksForYear,
     setWeekContract,
     setWeekVacation,
+    setWeekSick,
     addRegistration,
     updateRegistration,
     removeRegistration,

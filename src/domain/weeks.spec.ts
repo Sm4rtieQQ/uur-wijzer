@@ -19,7 +19,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     contractMinutes: 1920,
     defaultStartTime: '09:00',
     defaultEndTime: '17:00',
-    theme: 'light',
+    accentColor: '#2563eb',
     reminders: { enabled: false, days: [], time: '09:00' },
     ...overrides,
   }
@@ -38,8 +38,9 @@ function createRegistration(overrides: Partial<Registration> = {}): Registration
 
 function createAppData(overrides: Partial<AppData> = {}): AppData {
   return {
-    schemaVersion: 1,
+    schemaVersion: 3,
     username: 'Martin',
+    theme: 'system',
     profiles: [createProfile()],
     registrations: [],
     weeks: [],
@@ -48,10 +49,23 @@ function createAppData(overrides: Partial<AppData> = {}): AppData {
   }
 }
 
+/** Maakt een weekrecord met defaults; overschrijf alleen wat relevant is. */
+function createWeekRecord(overrides: Partial<WeekRecord> = {}): WeekRecord {
+  return {
+    profileId: 'profile-1',
+    isoYear: 2026,
+    isoWeek: 42,
+    contractMinutes: 1920,
+    isVacation: false,
+    sickMinutes: 0,
+    ...overrides,
+  }
+}
+
 describe('effectiveContractMinutes', () => {
   it('gebruikt het weekrecord als dat bestaat', () => {
     const profile = createProfile({ contractMinutes: 1920 })
-    const week: WeekRecord = { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false }
+    const week: WeekRecord = { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false, sickMinutes: 0 }
     expect(effectiveContractMinutes(week, profile)).toBe(1200)
   })
 
@@ -61,7 +75,7 @@ describe('effectiveContractMinutes', () => {
 
   it('geeft nul contracturen bij een vakantieweek', () => {
     const profile = createProfile({ contractMinutes: 1920 })
-    const week: WeekRecord = { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: true }
+    const week: WeekRecord = { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: true, sickMinutes: 0 }
     expect(effectiveContractMinutes(week, profile)).toBe(0)
   })
 })
@@ -69,8 +83,8 @@ describe('effectiveContractMinutes', () => {
 describe('findWeekRecord', () => {
   it('zoekt op profiel en ISO-week', () => {
     const weeks: WeekRecord[] = [
-      { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: false },
-      { profileId: 'profile-2', isoYear: 2026, isoWeek: 42, contractMinutes: 960, isVacation: false },
+      { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: false, sickMinutes: 0 },
+      { profileId: 'profile-2', isoYear: 2026, isoWeek: 42, contractMinutes: 960, isVacation: false, sickMinutes: 0 },
     ]
     expect(findWeekRecord(weeks, 'profile-2', { isoYear: 2026, isoWeek: 42 })?.contractMinutes).toBe(960)
     expect(findWeekRecord(weeks, 'profile-3', { isoYear: 2026, isoWeek: 42 })).toBeUndefined()
@@ -110,7 +124,7 @@ describe('weeksamenvatting', () => {
     ]
     const data = createAppData({
       registrations,
-      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false }],
+      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false, sickMinutes: 0 }],
     })
 
     const summary = buildWeekSummary(data, createProfile(), { isoYear: 2026, isoWeek: 42 })
@@ -126,13 +140,36 @@ describe('weeksamenvatting', () => {
   it('laat een vakantieweek meetellen met nul contracturen', () => {
     const data = createAppData({
       registrations: [createRegistration({ date: '2026-10-12', startTime: '09:00', endTime: '17:00' })],
-      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: true }],
+      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: true, sickMinutes: 0 }],
     })
     const summary = buildWeekSummary(data, createProfile(), { isoYear: 2026, isoWeek: 42 })
     expect(summary.isVacation).toBe(true)
     expect(summary.contractMinutes).toBe(0)
     expect(summary.storedContractMinutes).toBe(1920)
     expect(summary.balanceMinutes).toBe(480)
+  })
+
+  it('telt ziekte-uren mee in het saldo', () => {
+    const data = createAppData({
+      registrations: [createRegistration({ date: '2026-10-12', startTime: '09:00', endTime: '17:00' })],
+      weeks: [
+        createWeekRecord({ contractMinutes: 1200, sickMinutes: 480 }),
+      ],
+    })
+    const summary = buildWeekSummary(data, createProfile(), { isoYear: 2026, isoWeek: 42 })
+    expect(summary.workedMinutes).toBe(480)
+    expect(summary.sickMinutes).toBe(480)
+    expect(summary.contractMinutes).toBe(1200)
+    // saldo = gewerkt + ziekte − contract = 480 + 480 − 1200 = −240
+    expect(summary.balanceMinutes).toBe(-240)
+  })
+
+  it('negeert ziekte niet in een vakantieweek (contract is dan 0)', () => {
+    const data = createAppData({
+      weeks: [createWeekRecord({ isVacation: true, contractMinutes: 1920, sickMinutes: 300 })],
+    })
+    const summary = buildWeekSummary(data, createProfile(), { isoYear: 2026, isoWeek: 42 })
+    expect(summary.balanceMinutes).toBe(300)
   })
 
   it('negeert registraties van andere profielen', () => {
@@ -164,7 +201,7 @@ describe('relevantIsoWeeks', () => {
   it('neemt weken met gegevens op, inclusief lege tussenliggende weken en de huidige week', () => {
     const data = createAppData({
       registrations: [createRegistration({ date: '2026-01-07' })],
-      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 10, contractMinutes: 1920, isVacation: false }],
+      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 10, contractMinutes: 1920, isVacation: false, sickMinutes: 0 }],
     })
     const weeks = relevantIsoWeeks(data, 'profile-1', 2026, '2026-10-15')
     expect(weeks).toEqual([
@@ -187,8 +224,8 @@ describe('relevantIsoWeeks', () => {
   it('sorteert op weeknummer, oudste eerst', () => {
     const data = createAppData({
       weeks: [
-        { profileId: 'profile-1', isoYear: 2026, isoWeek: 30, contractMinutes: 1920, isVacation: false },
-        { profileId: 'profile-1', isoYear: 2026, isoWeek: 5, contractMinutes: 1920, isVacation: false },
+        { profileId: 'profile-1', isoYear: 2026, isoWeek: 30, contractMinutes: 1920, isVacation: false, sickMinutes: 0 },
+        { profileId: 'profile-1', isoYear: 2026, isoWeek: 5, contractMinutes: 1920, isVacation: false, sickMinutes: 0 },
       ],
     })
     expect(relevantIsoWeeks(data, 'profile-1', 2026, '2026-10-15').map((w) => w.isoWeek)).toEqual([5, 30, 42])
@@ -247,9 +284,18 @@ describe('yearBalance', () => {
         createRegistration({ date: '2026-10-12', startTime: '09:00', endTime: '17:00' }),
         createRegistration({ date: '2026-10-13', startTime: '09:00', endTime: '17:00' }),
       ],
-      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false }],
+      weeks: [{ profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1200, isVacation: false, sickMinutes: 0 }],
     })
     expect(yearBalance(data, createProfile(), 2026, '2026-10-15')).toBe(960 - 1200)
+  })
+
+  it('telt ziekte-uren mee in het jaarsaldo', () => {
+    const data = createAppData({
+      registrations: [createRegistration({ date: '2026-10-12', startTime: '09:00', endTime: '17:00' })],
+      weeks: [createWeekRecord({ contractMinutes: 1200, sickMinutes: 480 })],
+    })
+    // (480 gewerkt + 480 ziekte − 1200 contract) = −240
+    expect(yearBalance(data, createProfile(), 2026, '2026-10-15')).toBe(-240)
   })
 
   it('negeert weken zonder gegevens en toekomstige weken', () => {

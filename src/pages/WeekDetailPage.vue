@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import WeekDayCells from '../components/WeekDayCells.vue'
 import RegistrationFormDialog from '../components/RegistrationFormDialog.vue'
+import SicknessFormDialog from '../components/SicknessFormDialog.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useAppStore } from '../state/appStore'
 import { navigate } from '../router/router'
@@ -23,6 +24,7 @@ const profile = computed(() => store.activeProfile.value)
 const ref0 = computed<IsoWeekRef>(() => ({ isoYear: props.isoYear, isoWeek: props.isoWeek }))
 
 const registrationDialogOpen = ref(false)
+const sicknessDialogOpen = ref(false)
 const editingRegistration = ref<Registration | null>(null)
 const deletingRegistration = ref<Registration | null>(null)
 
@@ -114,30 +116,35 @@ function balanceClass(minutes: number): string {
 </script>
 
 <template>
-  <div v-if="!profile || !summary" class="uw-page">
+  <div v-if="!profile || !summary" class="uw-page" name="weekDetailNoProfile" id="weekDetailNoProfile">
     <p>Er is geen actief profiel. Kies eerst een profiel.</p>
     <button type="button" class="uw-button uw-button--primary" @click="navigate({ name: 'profiles' })">
       Naar profielkeuze
     </button>
   </div>
 
-  <div v-else class="uw-page">
-    <header class="uw-stack">
-      <div class="uw-row">
-        <h1>Week {{ summary.isoWeek }}</h1>
-        <span v-if="summary.isVacation" class="uw-badge">Vakantie</span>
-      </div>
-      <p class="uw-meta">{{ formatDateRangeDutch(summary.startDate, summary.endDate) }} · {{ summary.isoYear }}</p>
-      <div class="uw-row" style="justify-content: flex-start">
-        <button type="button" class="uw-button" @click="navigate({ name: 'overview' })">Terug naar overzicht</button>
-        <button type="button" class="uw-button uw-button--primary" @click="openNew">Registratie toevoegen</button>
+  <div v-else class="uw-page" name="weekDetailPage" id="weekDetailPage">
+    <header class="uw-stack" name="weekDetailHeader" id="weekDetailHeader">
+      <div class="uw-row" style="align-items: flex-end">
+        <div class="uw-stack">
+          <div class="uw-row" style="justify-content: flex-start">
+            <h1>Week {{ summary.isoWeek }}</h1>
+            <span v-if="summary.isVacation" class="uw-badge">Vakantie</span>
+          </div>
+          <p class="uw-meta">{{ formatDateRangeDutch(summary.startDate, summary.endDate) }} · {{ summary.isoYear }}</p>
+        </div>
+        <button type="button" class="uw-button" @click="navigate({ name: 'overview' })">Terug</button>
       </div>
     </header>
 
-    <section class="uw-card">
+    <section class="uw-card" name="weekBalance" id="weekBalance">
       <div class="uw-row">
         <span>Gewerkte uren</span>
         <strong>{{ formatDuration(summary.workedMinutes) }}</strong>
+      </div>
+      <div v-if="summary.sickMinutes > 0" class="uw-row">
+        <span>Ziekte-uren</span>
+        <strong>{{ formatDuration(summary.sickMinutes) }}</strong>
       </div>
       <div class="uw-row">
         <span>Saldo</span>
@@ -145,10 +152,13 @@ function balanceClass(minutes: number): string {
           {{ formatSignedDuration(summary.balanceMinutes) }}
         </span>
       </div>
+    </section>
+
+    <section class="uw-card" name="weekDaySummary" id="weekDaySummary">
       <WeekDayCells :daily-minutes="summary.dailyMinutes" />
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="weekContract" id="weekContract">
       <h2>Weekcontract</h2>
       <div class="uw-row" style="align-items: flex-end">
         <div class="uw-field" style="flex: 1">
@@ -170,11 +180,26 @@ function balanceClass(minutes: number): string {
       </label>
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="weekActions" id="weekActions">
+      <button type="button" class="uw-button uw-button--primary uw-button--block" @click="openNew">
+        Uren registreren
+      </button>
+      <button type="button" class="uw-button uw-button--block" @click="sicknessDialogOpen = true">
+        Ziekte registreren
+      </button>
+    </section>
+
+    <section class="uw-card" name="weekRegistrations" id="weekRegistrations">
       <h2>Registraties ({{ registrations.length }})</h2>
       <p v-if="registrations.length === 0" class="uw-meta">Deze week heeft nog geen registraties.</p>
       <ul v-else class="uw-list" style="list-style: none; margin: 0; padding: 0">
-        <li v-for="registration in registrations" :key="registration.id" class="uw-card">
+        <li
+          v-for="registration in registrations"
+          :key="registration.id"
+          class="uw-card"
+          :name="`registration-${registration.id}`"
+          :id="`registration-${registration.id}`"
+        >
           <div class="uw-row">
             <span>
               <strong>{{ dayLabel(registration) }} {{ formatDateDutch(registration.date) }}</strong>
@@ -200,8 +225,17 @@ function balanceClass(minutes: number): string {
       @close="closeDialog"
     />
 
+    <SicknessFormDialog
+      :open="sicknessDialogOpen"
+      :profile="profile"
+      :week="ref0"
+      :sick-minutes="summary.sickMinutes"
+      @close="sicknessDialogOpen = false"
+    />
+
     <ConfirmDialog
       :open="deletingRegistration !== null"
+      dialog-id="deleteRegistrationDialog"
       title="Registratie verwijderen"
       :message="
         deletingRegistration

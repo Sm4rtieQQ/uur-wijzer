@@ -3,7 +3,7 @@ import { flushPromises } from '@vue/test-utils'
 import SettingsPage from './SettingsPage.vue'
 import { resetAppStoreForTests, useAppStore, type AppStore } from '../state/appStore'
 import { currentRoute } from '../router/router'
-import { findButton, mountPage, requireElement, submitForm } from '../testing/testHelpers'
+import { findButton, mountPage, requireElement, submitForm, expectUniqueContainerIds, requireContainer } from '../testing/testHelpers'
 
 const { downloadSpy } = vi.hoisted(() => ({ downloadSpy: vi.fn() }))
 vi.mock('../services/fileTransfer', () => ({
@@ -33,7 +33,7 @@ function seedProfile(name = 'Bakkerij Jansen') {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
   })
 }
 
@@ -46,6 +46,37 @@ describe('SettingsPage', () => {
     await submitForm(wrapper)
 
     expect(store.state.data.username).toBe('Martina')
+  })
+
+  it('wijzigt het app-brede thema onder Algemeen', async () => {
+    seedProfile()
+    const wrapper = mountPage(SettingsPage)
+
+    await requireElement(wrapper, '#settings-theme').setValue('dark')
+    await submitForm(wrapper)
+
+    expect(store.state.data.theme).toBe('dark')
+    expect(wrapper.text()).toContain('Algemene instellingen opgeslagen.')
+  })
+
+  it('toont de app-brede notitie onder Algemeen en niet meer achter de labels', () => {
+    seedProfile()
+    const wrapper = mountPage(SettingsPage)
+    const general = requireContainer(wrapper, 'generalSettings')
+
+    expect(general.text()).toContain('Voor hele app')
+    expect(general.text()).not.toContain('(voor de hele app)')
+  })
+
+  it('past de accentkleur van het profiel toe', async () => {
+    seedProfile()
+    const wrapper = mountPage(SettingsPage)
+
+    await requireElement(wrapper, '#profile-accent-7c3aed').setValue(true)
+    // Formulier 0 is de gebruikersnaam; formulier 1 is het profiel.
+    await submitForm(wrapper, 1)
+
+    expect(store.state.data.profiles[0]?.accentColor).toBe('#7c3aed')
   })
 
   it('wijzigt profielinstellingen en merkt op dat contractwijzigingen alleen toekomstige weken raken', async () => {
@@ -126,5 +157,24 @@ describe('SettingsPage', () => {
     expect(content.startsWith('\uFEFF')).toBe(true)
     expect(content).toContain('Bakkerij Jansen')
     expect(content).toContain('2026-10-12')
+  })
+
+  it('geeft elk instellingenblok een name en id met dezelfde waarde', () => {
+    seedProfile()
+    const wrapper = mountPage(SettingsPage)
+
+    for (const containerId of [
+      'settingsPage',
+      'generalSettings',
+      'generalForm',
+      'profileSettings',
+      'profileForm',
+      'reminderSettings',
+      'csvBackup',
+      'deleteProfile',
+    ]) {
+      requireContainer(wrapper, containerId)
+    }
+    expectUniqueContainerIds(wrapper)
   })
 })

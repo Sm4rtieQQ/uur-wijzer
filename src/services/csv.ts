@@ -1,8 +1,15 @@
-import { isValidIsoDate } from '../domain/date'
+import { formatDateDutch, isValidIsoDate } from '../domain/date'
+import { DEFAULT_ACCENT_COLOR } from '../domain/defaults'
 import { getIsoWeek, isValidIsoWeek } from '../domain/isoWeek'
 import { elapsedMinutes, isValidTimeOfDay, minutesToHours } from '../domain/time'
 import { SCHEMA_VERSION, type AppData, type IsoWeekday, type Profile, type Registration, type ThemeId, type WeekRecord } from '../domain/types'
-import { validateContractHours, validateProfileInput, validateReminderSettings } from '../domain/validation'
+import {
+  findOverlappingRegistration,
+  validateContractHours,
+  validateProfileInput,
+  validateReminderSettings,
+  validateSickHours,
+} from '../domain/validation'
 
 /**
  * CSV-formaat van UurWijzer.
@@ -12,6 +19,9 @@ import { validateContractHours, validateProfileInput, validateReminderSettings }
  * - Elke rij heeft een `record`-kolom: `meta`, `profile`, `week` of `registration`.
  * - Getallen met decimalen gebruiken een punt (bijvoorbeeld 32.5).
  * - Herinneringsdagen staan als `1|3|5` (ISO-weekdagen, 1 = maandag).
+ * - `theme` (app-thema) staat in de meta-rij; `accent_color` per profiel en
+ *   `sick_hours` per week. Kolommen van vóór schemaversie 3 (`accent_color`,
+ *   `sick_hours`, `theme` in de meta-rij) zijn optioneel bij het importeren.
  */
 export const CSV_COLUMNS = [
   'record',
@@ -22,6 +32,7 @@ export const CSV_COLUMNS = [
   'contract_hours',
   'default_start_time',
   'default_end_time',
+  'accent_color',
   'theme',
   'reminders_enabled',
   'reminder_days',
@@ -30,11 +41,15 @@ export const CSV_COLUMNS = [
   'iso_week',
   'week_contract_hours',
   'is_vacation',
+  'sick_hours',
   'registration_id',
   'date',
   'start_time',
   'end_time',
 ] as const
+
+/** Kolommen die meegaan vanaf schemaversie 3; ontbreken is toegestaan (defaults). */
+export const OPTIONAL_CSV_COLUMNS = ['accent_color', 'sick_hours'] as const
 
 export type CsvColumn = (typeof CSV_COLUMNS)[number]
 type CsvRow = Partial<Record<CsvColumn, string>>
@@ -79,10 +94,12 @@ function toLine(row: CsvRow): string {
 }
 
 /** Maakt één CSV-bestand met alle profielen, weekgegevens en registraties. */
-export function exportToCsv(data: Pick<AppData, 'username' | 'profiles' | 'registrations' | 'weeks'>): string {
+export function exportToCsv(data: Pick<AppData, 'username' | 'theme' | 'profiles' | 'registrations' | 'weeks'>): string {
   const lines: string[] = []
   lines.push(CSV_COLUMNS.join(','))
-  lines.push(toLine({ record: 'meta', schema_version: String(SCHEMA_VERSION), username: data.username }))
+  lines.push(
+    toLine({ record: 'meta', schema_version: String(SCHEMA_VERSION), username: data.username, theme: data.theme }),
+  )
 
   for (const profile of data.profiles) {
     lines.push(
@@ -93,18 +110,18 @@ export function exportToCsv(data: Pick<AppData, 'username' | 'profiles' | 'regis
         contract_hours: formatHours(profile.contractMinutes),
         default_start_time: profile.defaultStartTime,
         default_end_time: profile.defaultEndTime,
-        theme: profile.theme,
+        accent_color: profile.accentColor,
         reminders_enabled: profile.reminders.enabled ? 'true' : 'false',
         reminder_days: isoDaysToString(profile.reminders.days),
         reminder_time: profile.reminders.time,
       }),
     )
 
-    // Alleen weken met eigen informatie worden bewaard: vakantie of een
-    // weekcontract dat afwijkt van het profielcontract.
+    // Alleen weken met eigen informatie worden bewaard: vakantie, ziekte-uren
+    // of een weekcontract dat afwijkt van het profielcontract.
     for (const week of data.weeks) {
       if (week.profileId !== profile.id) continue
-      if (!week.isVacation && week.contractMinutes === profile.contractMinutes) continue
+      if (!week.isVacation && week.sickMinutes === 0 && week.contractMinutes === profile.contractMinutes) continue
       lines.push(
         toLine({
           record: 'week',
@@ -113,6 +130,7 @@ export function exportToCsv(data: Pick<AppData, 'username' | 'profiles' | 'regis
           iso_week: String(week.isoWeek),
           week_contract_hours: formatHours(week.contractMinutes),
           is_vacation: week.isVacation ? 'true' : 'false',
+          sick_hours: formatHours(week.sickMinutes),
         }),
       )
     }
@@ -243,7 +261,9 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
     if (index >= 0) columnIndex.set(column, index)
   }
 
-  const missingColumns = CSV_COLUMNS.filter((column) => !columnIndex.has(column))
+  const missingColumns = CSV_COLUMNS.filter(
+    (column) => !(OPTIONAL_CSV_COLUMNS as readonly string[]).includes(column) && !columnIndex.has(column),
+  )
   if (missingColumns.length > 0) {
     return {
       ok: false,
@@ -275,8 +295,23 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
     )
   }
 
+  // Vóór schemaversie 3 stond het thema op elke profielrij. Dat veld is nu
+  // app-breed; gevulde waarden melden we zodat niets stil verdwijnt.
+  const themeIndex = columnIndex.get('theme')
+  const recordIndex = columnIndex.get('record')
+  const hasLegacyProfileTheme =
+    themeIndex !== undefined &&
+    recordIndex !== undefined &&
+    rows.slice(1).some((row) => (row[recordIndex] ?? '').trim() === 'profile' && (row[themeIndex] ?? '').trim() !== '')
+  if (hasLegacyProfileTheme) {
+    warnings.push(
+      'Het thema stond voorheen per profiel; het is nu een app-brede instelling en is niet uit dit bestand overgenomen.',
+    )
+  }
+
   let schemaVersion = SCHEMA_VERSION
   let usernameFromFile: string | null = null
+  let themeFromFile: ThemeId | null = null
   const newProfiles: Profile[] = []
   const newWeeks: WeekRecord[] = []
   const newRegistrations: Registration[] = []
@@ -290,6 +325,7 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
     isoWeek: number
     contractMinutes: number
     isVacation: boolean
+    sickMinutes: number
     rowNumber: number
   }
   interface RegistrationRow {
@@ -311,6 +347,8 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
       if (Number.isInteger(version) && version > 0) schemaVersion = version
       const username = valueOf(row, 'username')
       if (username.trim() !== '') usernameFromFile = username.trim()
+      const theme = valueOf(row, 'theme').trim()
+      if (theme === 'light' || theme === 'dark' || theme === 'system') themeFromFile = theme
       continue
     }
 
@@ -319,12 +357,14 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
       profileRowIds.push(profileId)
 
       const contractHours = valueOf(row, 'contract_hours').trim()
+      // De accentkleur is optioneel in oudere bestanden; leeg betekent standaard.
+      const accentColor = valueOf(row, 'accent_color').trim() || DEFAULT_ACCENT_COLOR
       const validation = validateProfileInput({
         name: valueOf(row, 'profile_name'),
         contractHours,
         defaultStartTime: valueOf(row, 'default_start_time').trim(),
         defaultEndTime: valueOf(row, 'default_end_time').trim(),
-        theme: valueOf(row, 'theme').trim() as ThemeId,
+        accentColor,
       })
 
       if (profileId === '') {
@@ -366,7 +406,7 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
           contractMinutes: validation.value.contractMinutes,
           defaultStartTime: validation.value.defaultStartTime,
           defaultEndTime: validation.value.defaultEndTime,
-          theme: validation.value.theme,
+          accentColor: validation.value.accentColor,
           reminders: {
             enabled: remindersEnabled,
             days: reminderValidation.value.days as IsoWeekday[],
@@ -383,6 +423,8 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
       const isoWeek = Number(valueOf(row, 'iso_week'))
       const contractHours = valueOf(row, 'week_contract_hours').trim()
       const isVacation = parseBooleanField(valueOf(row, 'is_vacation'))
+      // Ziekte-uren zijn optioneel in oudere bestanden; leeg betekent 0.
+      const sickHours = valueOf(row, 'sick_hours').trim() || '0'
 
       if (profileId === '') {
         errors.push(`Regel ${rowNumber}: weekgegevens zonder profiel_id.`)
@@ -401,6 +443,11 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
         errors.push(`Regel ${rowNumber}: is_vacation moet true of false zijn.`)
         continue
       }
+      const sick = validateSickHours(sickHours)
+      if (!sick.ok) {
+        errors.push(`Regel ${rowNumber}: ongeldige ziekte-uren (${sickHours}).`)
+        continue
+      }
 
       weekRows.push({
         profileId,
@@ -408,6 +455,7 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
         isoWeek,
         contractMinutes: contract.value.contractMinutes,
         isVacation,
+        sickMinutes: sick.value.sickMinutes,
         rowNumber,
       })
       continue
@@ -516,11 +564,15 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
       isoWeek: row.isoWeek,
       contractMinutes: row.contractMinutes,
       isVacation: row.isVacation,
+      sickMinutes: row.sickMinutes,
     })
   }
 
   const existingRegistrationIds = new Set(existing.registrations.map((registration) => registration.id))
   const newRegistrationIds = new Set<string>()
+  // Alle registraties die na deze import voor een profiel gelden; hiertegen
+  // wordt op overlap gecontroleerd (bestaand + al geaccepteerd in dit bestand).
+  const acceptedRegistrations: Registration[] = [...existing.registrations]
 
   for (const { registration, rowNumber } of registrationRows) {
     if (!knownProfileIds.has(registration.profileId)) {
@@ -529,8 +581,21 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
     }
     if (skippedProfileIds.has(registration.profileId)) continue
     if (existingRegistrationIds.has(registration.id) || newRegistrationIds.has(registration.id)) continue
+
+    const overlap = findOverlappingRegistration(registration.date, registration.startTime, registration.endTime, {
+      existingRegistrations: acceptedRegistrations.filter((item) => item.profileId === registration.profileId),
+    })
+    if (overlap) {
+      errors.push(
+        `Regel ${rowNumber}: deze registratie overlapt met een registratie van ${overlap.startTime} tot ` +
+          `${overlap.endTime} op ${formatDateDutch(overlap.date)}.`,
+      )
+      continue
+    }
+
     newRegistrationIds.add(registration.id)
     newRegistrations.push(registration)
+    acceptedRegistrations.push(registration)
   }
 
   if (errors.length > 0) {
@@ -560,6 +625,7 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
       isoWeek: weekOfRegistration.isoWeek,
       contractMinutes: profile.contractMinutes,
       isVacation: false,
+      sickMinutes: 0,
     })
   }
 
@@ -579,6 +645,7 @@ export function importFromCsv(text: string, existing: AppData): CsvImportResult 
     data: {
       schemaVersion: SCHEMA_VERSION,
       username,
+      theme: themeFromFile ?? existing.theme,
       profiles: [...existing.profiles, ...newProfiles],
       registrations: [...existing.registrations, ...newRegistrations],
       weeks: [...existing.weeks, ...importedWeeks],

@@ -9,6 +9,8 @@ const props = defineProps<{
   danger?: boolean
   /** Wanneer ingevuld moet de gebruiker deze tekst exact overtypen. */
   requiredText?: string | null
+  /** Waarde voor het `name`- en `id`-attribuut van de dialoogcontainer. */
+  dialogId?: string
 }>()
 
 const emit = defineEmits<{
@@ -37,7 +39,14 @@ function onKeydown(event: KeyboardEvent): void {
 
 <template>
   <div v-if="props.open" class="uw-dialog-backdrop" @click.self="emit('cancel')" @keydown="onKeydown">
-    <div class="uw-dialog" role="alertdialog" aria-modal="true" :aria-label="props.title">
+    <div
+      class="uw-dialog"
+      role="alertdialog"
+      aria-modal="true"
+      :aria-label="props.title"
+      :name="props.dialogId ?? 'confirmDialog'"
+      :id="props.dialogId ?? 'confirmDialog'"
+    >
       <h2>{{ props.title }}</h2>
       <p>{{ props.message }}</p>
 

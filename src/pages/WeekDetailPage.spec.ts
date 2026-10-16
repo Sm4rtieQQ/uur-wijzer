@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import WeekDetailPage from './WeekDetailPage.vue'
 import { resetAppStoreForTests, useAppStore, type AppStore } from '../state/appStore'
 import { findWeekRecord } from '../domain/weeks'
-import { findButton, mountPage, requireElement } from '../testing/testHelpers'
+import { findButton, mountPage, requireElement, submitForm, expectUniqueContainerIds, requireContainer } from '../testing/testHelpers'
 
 const now = new Date(2026, 9, 15, 10, 0)
 let store: AppStore
@@ -26,7 +26,7 @@ function seedProfile(contractMinutes = 1920) {
     contractMinutes,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
   })
 }
 
@@ -84,6 +84,57 @@ describe('WeekDetailPage', () => {
     expect(wrapper.text()).toContain('Vul de contracturen in als getal')
   })
 
+  it('toont ziekte-uren pas bij meer dan nul', () => {
+    const profile = seedProfile()
+    const wrapper = mountWeekDetail()
+    expect(wrapper.text()).not.toContain('Ziekte-uren')
+
+    store.setWeekSick(profile.id, { isoYear: 2026, isoWeek: 42 }, 240)
+    const withSick = mountWeekDetail()
+    expect(withSick.text()).toContain('Ziekte-uren')
+    expect(withSick.text()).toContain('4u')
+  })
+
+  it('bewerkt ziekte-uren via dezelfde dialoog als het dashboard', async () => {
+    const profile = seedProfile()
+    store.setWeekSick(profile.id, { isoYear: 2026, isoWeek: 42 }, 240)
+
+    const wrapper = mountWeekDetail()
+    await findButton(wrapper, 'Ziekte registreren').trigger('click')
+
+    expect((requireElement(wrapper, '#sickness-hours').element as HTMLInputElement).value).toBe('4')
+    await requireElement(wrapper, '#sickness-hours').setValue('6,5')
+    await submitForm(wrapper)
+
+    expect(findWeekRecord(store.state.data.weeks, profile.id, { isoYear: 2026, isoWeek: 42 })?.sickMinutes).toBe(390)
+    expect(wrapper.find('#sickness-hours').exists()).toBe(false)
+  })
+
+  it('geeft de weekcontainers en registratie-items een name en id', async () => {
+    const profile = seedProfile()
+    const registration = store.addRegistration(profile.id, {
+      date: '2026-10-12',
+      startTime: '08:00',
+      endTime: '12:00',
+    })
+
+    const wrapper = mountWeekDetail()
+
+    for (const containerId of [
+      'weekDetailPage',
+      'weekDetailHeader',
+      'weekBalance',
+      'weekDaySummary',
+      'weekContract',
+      'weekActions',
+      'weekRegistrations',
+      `registration-${registration.id}`,
+    ]) {
+      requireContainer(wrapper, containerId)
+    }
+    expectUniqueContainerIds(wrapper)
+  })
+
   it('werkt een registratie bij via het formulier', async () => {
     const profile = seedProfile()
     const registration = store.addRegistration(profile.id, {
@@ -100,6 +151,24 @@ describe('WeekDetailPage', () => {
     const updated = store.state.data.registrations.find((item) => item.id === registration.id)
     expect(updated?.endTime).toBe('14:00')
     expect(wrapper.text()).toContain('6u')
+  })
+
+  it('weigert bij het wijzigen een tijdvak dat een andere registratie overlapt', async () => {
+    const profile = seedProfile()
+    store.addRegistration(profile.id, { date: '2026-10-12', startTime: '08:00', endTime: '12:00' })
+    const later = store.addRegistration(profile.id, { date: '2026-10-12', startTime: '13:00', endTime: '17:00' })
+
+    const wrapper = mountWeekDetail()
+    // De tweede registratie (13:00–17:00) aanpassen naar 08:00–13:00: dat overlapt de eerste.
+    await findButton(wrapper, 'Aanpassen', 1).trigger('click')
+    await requireElement(wrapper, '#registration-start').setValue('08:00')
+    await requireElement(wrapper, '#registration-end').setValue('13:00')
+    await submitForm(wrapper)
+
+    expect(wrapper.text()).toContain('overlapt met een bestaande registratie van 08:00 tot 12:00')
+    const unchanged = store.state.data.registrations.find((item) => item.id === later.id)
+    expect(unchanged?.startTime).toBe('13:00')
+    expect(unchanged?.endTime).toBe('17:00')
   })
 
   it('verwijdert een registratie pas na bevestiging', async () => {

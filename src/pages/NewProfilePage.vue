@@ -3,7 +3,7 @@ import { ref } from 'vue'
 import ProfileForm from '../components/ProfileForm.vue'
 import { useAppStore } from '../state/appStore'
 import { navigate } from '../router/router'
-import { DEFAULT_CONTRACT_HOURS, DEFAULT_END_TIME, DEFAULT_START_TIME, DEFAULT_THEME } from '../domain/defaults'
+import { DEFAULT_ACCENT_COLOR, DEFAULT_CONTRACT_HOURS, DEFAULT_END_TIME, DEFAULT_START_TIME } from '../domain/defaults'
 import { importFromCsv, type CsvImportSummary } from '../services/csv'
 import { readFileAsText } from '../services/fileTransfer'
 import type { ValidatedProfile } from '../domain/validation'
@@ -53,26 +53,26 @@ async function importFile(event: Event): Promise<void> {
 </script>
 
 <template>
-  <div class="uw-page">
-    <header class="uw-stack">
+  <div class="uw-page" name="newProfilePage" id="newProfilePage">
+    <header class="uw-stack" name="newProfileHeader" id="newProfileHeader">
       <h1>Nieuw profiel</h1>
       <p class="uw-meta">Vul de gegevens van de werkgever in. Je kunt ze later aanpassen in de instellingen.</p>
     </header>
 
-    <section class="uw-card">
+    <section class="uw-card" name="newProfileForm" id="newProfileForm">
       <ProfileForm
         :initial-name="''"
         :initial-contract-hours="String(DEFAULT_CONTRACT_HOURS)"
         :initial-start-time="DEFAULT_START_TIME"
         :initial-end-time="DEFAULT_END_TIME"
-        :initial-theme="DEFAULT_THEME"
+        :initial-accent-color="DEFAULT_ACCENT_COLOR"
         submit-label="Profiel aanmaken"
         @submit="createProfile"
         @cancel="navigate({ name: 'profiles' })"
       />
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="profileImport" id="profileImport">
       <h2>Profiel importeren</h2>
       <p class="uw-meta">Kies een exportbestand van UurWijzer. Bestaande profielen worden overgeslagen.</p>
       <div class="uw-field">

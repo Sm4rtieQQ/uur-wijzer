@@ -24,7 +24,7 @@ const profileInput = {
   contractMinutes: 1920,
   defaultStartTime: '08:00',
   defaultEndTime: '16:30',
-  theme: 'light' as const,
+  accentColor: '#2563eb',
 }
 
 beforeEach(() => {

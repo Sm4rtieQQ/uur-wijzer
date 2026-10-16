@@ -58,15 +58,15 @@ function balanceClass(minutes: number): string {
 </script>
 
 <template>
-  <div v-if="!profile" class="uw-page">
+  <div v-if="!profile" class="uw-page" name="overviewNoProfile" id="overviewNoProfile">
     <p>Er is geen actief profiel. Kies eerst een profiel.</p>
     <button type="button" class="uw-button uw-button--primary" @click="navigate({ name: 'profiles' })">
       Naar profielkeuze
     </button>
   </div>
 
-  <div v-else class="uw-page">
-    <header class="uw-stack">
+  <div v-else class="uw-page" name="overviewPage" id="overviewPage">
+    <header class="uw-stack" name="overviewHeader" id="overviewHeader">
       <div class="uw-row">
         <h1>Overzicht</h1>
         <span class="uw-row uw-meta">
@@ -93,12 +93,17 @@ function balanceClass(minutes: number): string {
       class="uw-week-link"
       @click="openWeek(week)"
     >
-      <span class="uw-week-container">
+      <span
+        class="uw-week-container"
+        :name="`week-${week.isoYear}-${week.isoWeek}`"
+        :id="`week-${week.isoYear}-${week.isoWeek}`"
+      >
         <span class="uw-row">
           <strong>Week {{ week.isoWeek }}</strong>
           <span v-if="week.isVacation" class="uw-badge">Vakantie</span>
+          <span v-else-if="week.sickMinutes > 0" class="uw-badge">Ziek</span>
           <span v-else-if="week.registrationCount === 0" class="uw-badge">Leeg</span>
-          <span class="uw-meta">{{ formatDateRangeDutch(week.startDate, week.endDate) }}</span>
+          <span class="uw-week-date">{{ formatDateRangeDutch(week.startDate, week.endDate) }}</span>
         </span>
 
         <template v-if="week.registrationCount > 0">
@@ -116,7 +121,7 @@ function balanceClass(minutes: number): string {
               {{ formatSignedDuration(week.balanceMinutes) }}
             </span>
           </span>
-          <WeekDayCells :daily-minutes="week.dailyMinutes" />
+          <WeekDayCells :daily-minutes="week.dailyMinutes" :id-prefix="`week-${week.isoYear}-${week.isoWeek}`" />
         </template>
       </span>
     </button>

@@ -1,6 +1,7 @@
-import { compareIsoDates, isValidIsoDate, todayIsoDate } from './date'
-import { elapsedMinutes, hoursToMinutes, isValidTimeOfDay } from './time'
-import type { IsoWeekday, ThemeId, ValidationResult } from './types'
+import { compareIsoDates, formatDateDutch, isValidIsoDate, todayIsoDate } from './date'
+import { ACCENT_COLOR_OPTIONS } from './defaults'
+import { elapsedMinutes, hoursToMinutes, isValidTimeOfDay, parseTimeOfDay } from './time'
+import type { IsoWeekday, Registration, ValidationResult } from './types'
 
 /** Invoer van het registratieformulier (alles als tekst uit formuliervelden). */
 export interface RegistrationFormInput {
@@ -16,13 +17,24 @@ export interface ValidatedRegistration {
   endTime: string
 }
 
+/**
+ * Extra context voor de registratievalidatie. `existingRegistrations` bevat de
+ * registraties van **hetzelfde profiel**; daaruit wordt op overlap gecontroleerd.
+ */
+export interface RegistrationValidationContext {
+  /** Bestaande registraties van hetzelfde profiel. */
+  existingRegistrations?: readonly Registration[]
+  /** ID van de registratie die wordt gewijzigd; die telt zelf niet mee. */
+  excludeRegistrationId?: string | null
+}
+
 /** Invoer van het profielformulier. */
 export interface ProfileFormInput {
   name: string
   contractHours: string
   defaultStartTime: string
   defaultEndTime: string
-  theme: ThemeId
+  accentColor: string
 }
 
 /** Gevalideerde profielgegevens. */
@@ -31,7 +43,7 @@ export interface ValidatedProfile {
   contractMinutes: number
   defaultStartTime: string
   defaultEndTime: string
-  theme: ThemeId
+  accentColor: string
 }
 
 const MAX_MINUTES_PER_WEEK = 7 * 24 * 60
@@ -44,12 +56,43 @@ function parseDecimal(value: string): number | null {
   return Number.isFinite(parsed) ? parsed : null
 }
 
+/**
+ * Zoekt een bestaande registratie die hetzelfde tijdvak op dezelfde dag
+ * overlapt. Tijden die elkaar exact raken (bijv. 10:00–15:00 en 15:00–16:00)
+ * zijn géén overlap. Geeft `null` terug als er niets overlapt.
+ */
+export function findOverlappingRegistration(
+  date: string,
+  startTime: string,
+  endTime: string,
+  context: RegistrationValidationContext = {},
+): Registration | null {
+  const start = parseTimeOfDay(startTime)
+  const end = parseTimeOfDay(endTime)
+  // Ongeldige of lege tijdvakken worden elders al afgewezen.
+  if (start === null || end === null || end <= start) return null
+
+  for (const other of context.existingRegistrations ?? []) {
+    if (other.date !== date) continue
+    if (context.excludeRegistrationId && other.id === context.excludeRegistrationId) continue
+
+    const otherStart = parseTimeOfDay(other.startTime)
+    const otherEnd = parseTimeOfDay(other.endTime)
+    if (otherStart === null || otherEnd === null || otherEnd <= otherStart) continue
+
+    if (start < otherEnd && otherStart < end) return other
+  }
+
+  return null
+}
+
 /** Valideert de invoer van een registratie met Nederlandse foutmeldingen. */
 export function validateRegistrationInput(
   input: RegistrationFormInput,
   today: string = todayIsoDate(),
+  context: RegistrationValidationContext = {},
 ): ValidationResult<ValidatedRegistration> {
-  const errors: Partial<Record<keyof RegistrationFormInput, string>> = {}
+  const errors: Partial<Record<keyof RegistrationFormInput | 'overlap', string>> = {}
 
   const date = input.date.trim()
   if (date === '') {
@@ -72,6 +115,17 @@ export function validateRegistrationInput(
   if (!errors.startTime && !errors.endTime && elapsedMinutes(startTime, endTime) === null) {
     errors.endTime =
       'De eindtijd moet later zijn dan de starttijd. Diensten over middernacht worden niet ondersteund.'
+  }
+
+  // Alleen controleren als er verder geen fouten zijn: anders is het tijdvak
+  // nog niet betrouwbaar genoeg om op overlap te vergelijken.
+  if (Object.keys(errors).length === 0) {
+    const overlap = findOverlappingRegistration(date, startTime, endTime, context)
+    if (overlap) {
+      errors.overlap =
+        `Deze registratie overlapt met een bestaande registratie van ${overlap.startTime} tot ` +
+        `${overlap.endTime} op ${formatDateDutch(overlap.date)}. Registraties binnen één profiel mogen elkaar niet overlappen.`
+    }
   }
 
   if (Object.keys(errors).length > 0) {
@@ -123,8 +177,8 @@ export function validateProfileInput(input: ProfileFormInput): ValidationResult<
       'De standaard eindtijd moet later zijn dan de standaard starttijd. Diensten over middernacht worden niet ondersteund.'
   }
 
-  if (input.theme !== 'light' && input.theme !== 'dark' && input.theme !== 'system') {
-    errors.theme = 'Kies een geldig thema.'
+  if (!ACCENT_COLOR_OPTIONS.some((option) => option.value === input.accentColor)) {
+    errors.accentColor = 'Kies een geldige accentkleur.'
   }
 
   if (Object.keys(errors).length > 0) {
@@ -138,7 +192,7 @@ export function validateProfileInput(input: ProfileFormInput): ValidationResult<
       contractMinutes,
       defaultStartTime,
       defaultEndTime,
-      theme: input.theme,
+      accentColor: input.accentColor,
     },
   }
 }
@@ -154,6 +208,19 @@ export function validateContractHours(value: string): ValidationResult<{ contrac
     return { ok: false, errors: { contractHours: 'De contracturen moeten tussen 0 en 168 uur per week liggen.' } }
   }
   return { ok: true, value: { contractMinutes } }
+}
+
+/** Valideert een invoerveld met ziekte-uren (in uren) voor één week. */
+export function validateSickHours(value: string): ValidationResult<{ sickMinutes: number }> {
+  const hours = parseDecimal(value)
+  if (hours === null) {
+    return { ok: false, errors: { sickHours: 'Vul de ziekte-uren in als getal (bijvoorbeeld 8 of 7,5).' } }
+  }
+  const sickMinutes = hoursToMinutes(hours)
+  if (hours < 0 || sickMinutes > MAX_MINUTES_PER_WEEK) {
+    return { ok: false, errors: { sickHours: 'De ziekte-uren moeten tussen 0 en 168 uur per week liggen.' } }
+  }
+  return { ok: true, value: { sickMinutes } }
 }
 
 /** Valideert herinneringsinstellingen; lege dagen zijn alleen toegestaan als herinneringen uit staan. */

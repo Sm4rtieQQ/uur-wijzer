@@ -38,15 +38,15 @@
   }
 
   h1 {
-    font-size: 1.375rem;
+    font-size: var(--uw-font-size-h1);
   }
 
   h2 {
-    font-size: 1.125rem;
+    font-size: var(--uw-font-size-h2);
   }
 
   h3 {
-    font-size: 1rem;
+    font-size: var(--uw-font-size-h3);
   }
 
   p {
@@ -161,24 +161,62 @@
     padding: 0.375rem 0.5rem;
   }
 
+  /** Knop over de volle breedte van de container. */
+  .uw-button--block {
+    width: 100%;
+  }
+
+  /** Rij van knoppen die even breed naast elkaar staan (of netjes breken). */
+  .uw-button-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: calc(var(--uw-space) * 0.5);
+  }
+
+  .uw-button-row > .uw-button {
+    flex: 1 1 8rem;
+    min-width: 0;
+  }
+
+  /**
+   * Menubutton in de header, ca. 0,75× de standaardknopmaat. Als berekening
+   * (i.p.v. losse px) zodat de verhouding tot de oude maat bewaard blijft.
+   */
   .uw-menu-button {
     display: inline-flex;
     flex-direction: column;
     justify-content: center;
-    gap: 4px;
-    width: 2.75rem;
-    height: 2.75rem;
-    padding: 0.6rem 0.5rem;
+    gap: calc(4px * 0.75);
+    width: calc(2.75rem * 0.75);
+    height: calc(2.75rem * 0.75);
+    min-height: calc(2.75rem * 0.75);
+    padding: calc(0.6rem * 0.75) calc(0.5rem * 0.75);
     margin-left: auto;
   }
 
   .uw-menu-button span {
     display: block;
-    height: 2px;
+    height: calc(2px * 0.75);
     width: 100%;
     background-color: currentColor;
   }
 
+  /** Menuknop in de accentheader: transparante knop met alleen de balkjes zichtbaar. */
+  .uw-header .uw-menu-button {
+    background-color: transparent;
+    border-color: transparent;
+    color: var(--uw-accent-ink);
+  }
+
+  .uw-header .uw-menu-button:hover {
+    background-color: color-mix(in srgb, var(--uw-accent-ink) 15%, transparent);
+    border-color: transparent;
+  }
+
+  /**
+   * App-header, tevens de "banner": de achtergrond is de accentkleur van het
+   * actieve profiel en het klokdecor staat rechtsonder (zie `.uw-banner-dial`).
+   */
   .uw-header {
     position: sticky;
     top: 0;
@@ -188,10 +226,64 @@
     align-items: center;
     gap: calc(var(--uw-space) * 2);
     padding: var(--uw-space);
-    background-color: var(--uw-canvas);
+    background-color: var(--uw-accent);
+    color: var(--uw-accent-ink);
     border-bottom: 1px solid var(--uw-line);
     box-shadow: var(--uw-shadow-sm);
     transition: background-color 0.2s ease, border-color 0.2s ease, box-shadow 0.2s ease;
+  }
+
+  /**
+   * Klokdecor linksonder in de banner, achter de titel.
+   *
+   * De vorm staat als inline-SVG in `AppHeader.vue`. Deze laag vult de header;
+   * `preserveAspectRatio="xMinYMax meet"` op het SVG zorgt dat de uitsnede op de
+   * linkeronderhoek blijft staan en zo hoog wordt als de banner. De vorm is
+   * horizontaal gespiegeld zodat de ring naar links loopt. De kleur komt uit
+   * het profielaccent (`--uw-accent-soft`: accent gemengd met wit).
+   *
+   * Negatieve z-index zodat het decor achter de titel en de menuknop blijft.
+   */
+  .uw-banner-dial {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    fill: none;
+    stroke: var(--uw-accent-soft);
+    pointer-events: none;
+  }
+
+  .uw-header .uw-eyebrow {
+    color: var(--uw-accent-ink);
+    opacity: 0.85;
+  }
+
+  /**
+   * Banner op de profielkeuze: zelfde afmetingen en uitstraling als de
+   * app-header, met de accentkleur van het laatst geopende profiel. Het
+   * klokdecor ligt achter de inhoud (zie `.uw-banner-dial`).
+   */
+  .uw-profile-banner {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: calc(var(--uw-space) * 2);
+    padding: var(--uw-space);
+    min-height: 5.625rem; /* 90px: overeenkomstig de app-header op de andere pagina's */
+    background-color: var(--uw-accent);
+    color: var(--uw-accent-ink);
+    border-bottom: 1px solid var(--uw-line);
+  }
+
+  .uw-profile-banner > *:not(.uw-banner-dial) {
+    position: relative;
+    z-index: 1;
+  }
+
+  .uw-profile-banner .uw-banner-dial {
+    z-index: 0;
   }
 
   .uw-header-title {
@@ -213,12 +305,13 @@
   }
 
   .uw-header-title:hover {
-    border-color: var(--uw-accent);
+    border-color: currentColor;
   }
 
-  .uw-header-title strong {
-    font-size: 1.25rem;
-    line-height: 1.1;
+  /** Profieltitel in de app-header en de menulade: één stap groter dan de grootste kop. */
+  .uw-profile-title {
+    font-size: var(--uw-font-size-title);
+    line-height: 1.15;
   }
 
   .uw-eyebrow {
@@ -384,6 +477,12 @@
     border-color: var(--uw-accent);
   }
 
+  /** Datumbereik bij een week: kleiner dan de gewone meta-tekst. */
+  .uw-week-date {
+    font-size: var(--uw-font-size-xs);
+    color: var(--uw-muted);
+  }
+
   .uw-dialog-backdrop {
     position: fixed;
     inset: 0;
@@ -485,10 +584,68 @@
     background-color: var(--uw-surface);
   }
 
+  /**
+   * Terug-knop onder de menu-items: ruimer apart dan de afstand tussen de
+   * menu-items zelf (0.25rem) om de functie te scheiden.
+   */
+  .uw-nav-back {
+    align-self: flex-start;
+    margin-top: calc(var(--uw-space) * 0.5);
+  }
+
   .uw-checkbox-row {
     display: flex;
     align-items: center;
     gap: 0.5rem;
     font-size: var(--uw-font-size-small);
+  }
+
+  /**
+   * Kleurkeuze: negen kleuren in een raster van drie per rij, net zo breed als
+   * de container. Elke kleur heeft de vorm van een knop; het keuzerondje zelf
+   * is onzichtbaar en de kleurtegel is het bedieningselement.
+   */
+  .uw-swatches {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: calc(var(--uw-space) * 0.5);
+    width: 100%;
+  }
+
+  .uw-swatch {
+    position: relative;
+    display: block;
+    min-width: 0;
+    cursor: pointer;
+  }
+
+  .uw-swatch-input {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    opacity: 0;
+    cursor: pointer;
+  }
+
+  .uw-swatch-dot {
+    display: block;
+    width: 100%;
+    min-height: 2.375rem;
+    border-radius: var(--uw-radius);
+    border: 1px solid var(--uw-line);
+  }
+
+  /* Geselecteerde kleur: ring in de eigen kleur, los van de tegel. */
+  .uw-swatch-input:checked + .uw-swatch-dot {
+    outline: var(--uw-focus-ring) solid var(--uw-swatch-color);
+    outline-offset: 2px;
+  }
+
+  /* Toetsenbordfocus: duidelijke ring in de tekstkleur van het thema. */
+  .uw-swatch-input:focus-visible + .uw-swatch-dot {
+    outline: var(--uw-focus-ring) solid var(--uw-ink);
+    outline-offset: 2px;
   }
 }

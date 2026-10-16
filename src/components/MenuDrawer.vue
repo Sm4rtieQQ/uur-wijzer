@@ -48,7 +48,12 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div class="uw-dialog-backdrop uw-dialog-backdrop--drawer" @click.self="emit('close')">
+  <div
+    class="uw-dialog-backdrop uw-dialog-backdrop--drawer"
+    name="menuDrawer"
+    id="menuDrawer"
+    @click.self="emit('close')"
+  >
     <div
       ref="dialog"
       class="uw-dialog uw-dialog--drawer"
@@ -60,7 +65,7 @@ function onKeydown(event: KeyboardEvent): void {
     >
       <div class="uw-stack">
         <span class="uw-eyebrow">{{ username }}</span>
-        <strong>{{ companyName }}</strong>
+        <strong class="uw-profile-title">{{ companyName }}</strong>
       </div>
 
       <nav class="uw-nav" aria-label="Hoofdmenu">
@@ -75,6 +80,8 @@ function onKeydown(event: KeyboardEvent): void {
           {{ item.label }}
         </button>
       </nav>
+
+      <button type="button" class="uw-button uw-nav-back" @click="emit('close')">Terug</button>
     </div>
   </div>
 </template>

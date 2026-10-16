@@ -9,8 +9,8 @@ const emit = defineEmits<{
 </script>
 
 <template>
-  <div class="uw-page" role="status">
-    <div class="uw-alert uw-alert--info uw-stack">
+  <div class="uw-page" name="dataIssues" id="dataIssues" role="status">
+    <div class="uw-alert uw-alert--info uw-stack" name="dataIssuesAlert" id="dataIssuesAlert">
       <strong>Let op bij het laden van je gegevens</strong>
       <ul class="uw-stack" style="margin: 0; padding-left: 1.25rem">
         <li v-for="issue in issues" :key="issue">{{ issue }}</li>

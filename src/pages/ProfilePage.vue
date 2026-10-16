@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { useAppStore } from '../state/appStore'
 import { navigate } from '../router/router'
 import { minutesToHours } from '../domain/time'
+import BannerDial from '../components/BannerDial.vue'
 
 const store = useAppStore()
 const notice = ref('')
@@ -27,14 +28,15 @@ function chooseProfile(profileId: string): void {
 </script>
 
 <template>
-  <div class="uw-page">
-    <header class="uw-stack">
-      <h1>UurWijzer</h1>
-    </header>
+  <header class="uw-profile-banner" name="profilesHeader" id="profilesHeader">
+    <BannerDial />
+    <h1>UurWijzer</h1>
+  </header>
 
+  <div class="uw-page" name="profilesPage" id="profilesPage">
     <!-- Zolang er geen gebruikersnaam is, is invullen het enige dat hier kan. -->
-    <section v-if="username === ''" class="uw-card">
-      <form class="uw-stack" novalidate @submit.prevent="saveUsername">
+    <section v-if="username === ''" class="uw-card" name="usernameSetup" id="usernameSetup">
+      <form class="uw-stack" name="usernameForm" id="usernameForm" novalidate @submit.prevent="saveUsername">
         <div class="uw-field">
           <label for="username">Gebruikersnaam</label>
           <input id="username" v-model="usernameDraft" class="uw-input" type="text" autocomplete="name" />
@@ -48,10 +50,16 @@ function chooseProfile(profileId: string): void {
 
     <h2 v-else>Hallo, {{ username }}!</h2>
 
-    <section class="uw-card">
+    <section class="uw-card" name="profileList" id="profileList">
+      <h2 class="uw-profile-select-label">Selecteer een profiel</h2>
       <p v-if="profiles.length === 0" class="uw-meta">Er zijn nog geen profielen.</p>
       <ul v-else class="uw-list" style="list-style: none; margin: 0; padding: 0">
-        <li v-for="profile in profiles" :key="profile.id">
+        <li
+          v-for="profile in profiles"
+          :key="profile.id"
+          :name="`profile-${profile.id}`"
+          :id="`profile-${profile.id}`"
+        >
           <button type="button" class="uw-button uw-list-item" @click="chooseProfile(profile.id)">
             <span class="uw-stack" style="gap: 0">
               <strong>{{ profile.name }}</strong>

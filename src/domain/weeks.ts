@@ -14,7 +14,9 @@ export interface WeekSummary {
   /** Vastgelegde contracturen in minuten, ook bij vakantie. */
   storedContractMinutes: number
   workedMinutes: number
-  /** Gewerkte uren minus contracturen. */
+  /** Geregistreerde ziekte-uren in minuten. */
+  sickMinutes: number
+  /** Gewerkte + ziekte-uren minus contracturen. */
   balanceMinutes: number
   /** Zeven dagsommen (maandag t/m zondag) in minuten. */
   dailyMinutes: number[]
@@ -104,6 +106,7 @@ export function buildWeekSummary(
   const weekRecord = findWeekRecord(data.weeks, profile.id, ref)
   const registrations = registrationsInWeek(data.registrations, profile.id, ref)
   const worked = sumWorkedMinutes(registrations)
+  const sickMinutes = weekRecord?.sickMinutes ?? 0
   const contractMinutes =
     weekRecord && weekRecord.isVacation ? 0 : (weekRecord?.contractMinutes ?? profile.contractMinutes)
 
@@ -115,7 +118,8 @@ export function buildWeekSummary(
     contractMinutes,
     storedContractMinutes: weekRecord?.contractMinutes ?? profile.contractMinutes,
     workedMinutes: worked,
-    balanceMinutes: worked - contractMinutes,
+    sickMinutes,
+    balanceMinutes: worked + sickMinutes - contractMinutes,
     dailyMinutes: dailyMinutesForWeek(registrations, ref),
     registrationCount: registrations.length,
     isVacation: weekRecord?.isVacation ?? false,
@@ -193,8 +197,8 @@ export function compareIsoWeeksToDate(ref: IsoWeekRef, date: IsoDate): number {
 }
 
 /**
- * Urensaldo over een ISO-weekjaar: som van (gewerkte uren − contracturen)
- * over alle relevante weken van dat jaar.
+ * Urensaldo over een ISO-weekjaar: som van (gewerkte uren + ziekte-uren −
+ * contracturen) over alle relevante weken van dat jaar.
  */
 export function yearBalance(
   data: Pick<AppData, 'registrations' | 'weeks'>,

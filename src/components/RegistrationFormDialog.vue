@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch } from 'vue'
 import { todayIsoDate } from '../domain/date'
 import { validateRegistrationInput } from '../domain/validation'
 import type { IsoDate, Profile, Registration } from '../domain/types'
@@ -22,6 +22,11 @@ const emit = defineEmits<{
 const store = useAppStore()
 const errors = ref<Partial<Record<string, string>>>({})
 const today = todayIsoDate()
+
+// Bestaande registraties van ditzelfde profiel: die mogen niet overlappen.
+const existingRegistrations = computed(() =>
+  store.state.data.registrations.filter((registration) => registration.profileId === props.profile.id),
+)
 
 const form = reactive({
   date: today,
@@ -48,11 +53,18 @@ watch(() => props.open, (open) => {
 })
 
 function onSubmit(): void {
-  const result = validateRegistrationInput({
-    date: form.date,
-    startTime: form.startTime,
-    endTime: form.endTime,
-  })
+  const result = validateRegistrationInput(
+    {
+      date: form.date,
+      startTime: form.startTime,
+      endTime: form.endTime,
+    },
+    today,
+    {
+      existingRegistrations: existingRegistrations.value,
+      excludeRegistrationId: props.registration?.id ?? null,
+    },
+  )
 
   if (!result.ok) {
     errors.value = result.errors
@@ -75,7 +87,14 @@ function onKeydown(event: KeyboardEvent): void {
 </script>
 
 <template>
-  <div v-if="props.open" class="uw-dialog-backdrop" @click.self="emit('close')" @keydown="onKeydown">
+  <div
+    v-if="props.open"
+    class="uw-dialog-backdrop"
+    name="registrationDialog"
+    id="registrationDialog"
+    @click.self="emit('close')"
+    @keydown="onKeydown"
+  >
     <div class="uw-dialog" role="dialog" aria-modal="true" aria-labelledby="registration-dialog-title">
       <h2 id="registration-dialog-title">
         {{ props.registration ? 'Registratie aanpassen' : 'Registratie toevoegen' }}
@@ -99,6 +118,8 @@ function onKeydown(event: KeyboardEvent): void {
           <input id="registration-end" v-model="form.endTime" class="uw-input" type="time" />
           <p v-if="errors.endTime" class="uw-field-error">{{ errors.endTime }}</p>
         </div>
+
+        <p v-if="errors.overlap" class="uw-field-error" role="alert">{{ errors.overlap }}</p>
 
         <div class="uw-row" style="justify-content: flex-end">
           <button type="button" class="uw-button" @click="emit('close')">Annuleren</button>

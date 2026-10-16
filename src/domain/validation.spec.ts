@@ -1,11 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import {
+  findOverlappingRegistration,
   validateProfileInput,
   validateRegistrationInput,
   validateReminderSettings,
+  validateSickHours,
   type ProfileFormInput,
   type RegistrationFormInput,
 } from './validation'
+import type { Registration } from './types'
 
 const validRegistration: RegistrationFormInput = {
   date: '2026-10-15',
@@ -78,8 +81,78 @@ const validProfile: ProfileFormInput = {
   contractHours: '32,5',
   defaultStartTime: '08:00',
   defaultEndTime: '16:30',
-  theme: 'light',
+  accentColor: '#2563eb',
 }
+
+describe('validateRegistrationInput — overlap binnen één profiel', () => {
+  function registration(overrides: Partial<Registration> = {}): Registration {
+    return {
+      id: 'r1',
+      profileId: 'p1',
+      date: '2026-10-15',
+      startTime: '10:00',
+      endTime: '15:00',
+      ...overrides,
+    }
+  }
+
+  it('weigert een tijdvak dat een bestaande registratie overlapt', () => {
+    const result = validateRegistrationInput(
+      { date: '2026-10-15', startTime: '13:00', endTime: '16:00' },
+      '2026-10-15',
+      { existingRegistrations: [registration()] },
+    )
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.errors.overlap).toContain('overlapt')
+      expect(result.errors.overlap).toContain('10:00 tot 15:00')
+      expect(result.errors.overlap).toContain('15-10-2026')
+    }
+  })
+
+  it('weigert ook een tijdvak dat volledig binnen een bestaande registratie valt', () => {
+    const result = validateRegistrationInput(
+      { date: '2026-10-15', startTime: '11:00', endTime: '12:00' },
+      '2026-10-15',
+      { existingRegistrations: [registration()] },
+    )
+    expect(result.ok).toBe(false)
+  })
+
+  it('staat direct aansluitende tijden toe', () => {
+    const result = validateRegistrationInput(
+      { date: '2026-10-15', startTime: '15:00', endTime: '16:00' },
+      '2026-10-15',
+      { existingRegistrations: [registration()] },
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('negeert registraties op een andere dag', () => {
+    const result = validateRegistrationInput(
+      { date: '2026-10-14', startTime: '13:00', endTime: '16:00' },
+      '2026-10-15',
+      { existingRegistrations: [registration()] },
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('sluit de registratie die wordt gewijzigd uit van de controle', () => {
+    const result = validateRegistrationInput(
+      { date: '2026-10-15', startTime: '11:00', endTime: '14:00' },
+      '2026-10-15',
+      { existingRegistrations: [registration()], excludeRegistrationId: 'r1' },
+    )
+    expect(result.ok).toBe(true)
+  })
+
+  it('vindt geen overlap bij ongeldige of lege tijdvakken', () => {
+    const context = { existingRegistrations: [registration()] }
+    expect(findOverlappingRegistration('2026-10-15', '16:00', '10:00', context)).toBeNull()
+    expect(findOverlappingRegistration('2026-10-15', '', '', context)).toBeNull()
+  })
+})
 
 describe('validateProfileInput', () => {
   it('accepteert geldige invoer en trimt de naam', () => {
@@ -88,8 +161,14 @@ describe('validateProfileInput', () => {
     if (result.ok) {
       expect(result.value.name).toBe('Bakkerij Jansen')
       expect(result.value.contractMinutes).toBe(1950)
-      expect(result.value.theme).toBe('light')
+      expect(result.value.accentColor).toBe('#2563eb')
     }
+  })
+
+  it('weigert een accentkleur buiten de vaste set', () => {
+    const result = validateProfileInput({ ...validProfile, accentColor: '#123456' })
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.accentColor).toContain('accentkleur')
   })
 
   it('weigert een ontbrekende naam', () => {
@@ -134,5 +213,34 @@ describe('validateReminderSettings', () => {
     const result = validateReminderSettings(true, [5, 1, 5], '07:30')
     expect(result.ok).toBe(true)
     if (result.ok) expect(result.value.days).toEqual([1, 5])
+  })
+})
+
+describe('validateSickHours', () => {
+  it('accepteert uren met komma of punt en zet ze om naar minuten', () => {
+    const eight = validateSickHours('8')
+    expect(eight.ok).toBe(true)
+    if (eight.ok) expect(eight.value).toEqual({ sickMinutes: 480 })
+    expect(validateSickHours('7,5').ok).toBe(true)
+    expect(validateSickHours('7.5').ok).toBe(true)
+  })
+
+  it('accepteert 0 uur (verwijderen van ziekte)', () => {
+    const result = validateSickHours('0')
+    expect(result.ok).toBe(true)
+    if (result.ok) expect(result.value.sickMinutes).toBe(0)
+  })
+
+  it('weigert lege en ongeldige invoer', () => {
+    for (const value of ['', 'abc', '-4']) {
+      const result = validateSickHours(value)
+      expect(result.ok).toBe(false)
+    }
+  })
+
+  it('weigert meer dan 168 uur per week', () => {
+    const result = validateSickHours('169')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors.sickHours).toContain('168')
   })
 })

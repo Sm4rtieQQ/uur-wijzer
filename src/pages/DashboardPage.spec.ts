@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import DashboardPage from './DashboardPage.vue'
 import { resetAppStoreForTests, useAppStore, type AppStore } from '../state/appStore'
 import { currentRoute } from '../router/router'
-import { findButton, mountPage, requireElement, submitForm } from '../testing/testHelpers'
+import { findButton, mountPage, requireElement, submitForm, expectUniqueContainerIds, requireContainer } from '../testing/testHelpers'
 import { findWeekRecord } from '../domain/weeks'
 import { getIsoWeek } from '../domain/isoWeek'
 
@@ -15,7 +15,7 @@ function seedProfile(override: Partial<Parameters<AppStore['createProfile']>[0]>
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
     ...override,
   })
 }
@@ -130,12 +130,153 @@ describe('DashboardPage', () => {
     expect(store.state.data.registrations).toHaveLength(0)
   })
 
+  it('weigert een registratie die overlapt met een bestaande registratie', async () => {
+    const profile = seedProfile()
+    store.addRegistration(profile.id, { date: '2026-10-15', startTime: '08:00', endTime: '12:00' })
+
+    const wrapper = mountPage(DashboardPage)
+    await findButton(wrapper, 'Uren registreren').trigger('click')
+    await requireElement(wrapper, '#registration-start').setValue('10:00')
+    await requireElement(wrapper, '#registration-end').setValue('15:00')
+    await submitForm(wrapper)
+
+    expect(wrapper.text()).toContain('overlapt met een bestaande registratie van 08:00 tot 12:00')
+    // Niets opgeslagen en de dialoog blijft open zodat de gebruiker kan aanpassen.
+    expect(store.state.data.registrations).toHaveLength(1)
+    expect(wrapper.find('#registration-start').exists()).toBe(true)
+  })
+
+  it('staat een registratie toe die niet overlapt', async () => {
+    const profile = seedProfile()
+    store.addRegistration(profile.id, { date: '2026-10-15', startTime: '08:00', endTime: '12:00' })
+
+    const wrapper = mountPage(DashboardPage)
+    await findButton(wrapper, 'Uren registreren').trigger('click')
+    await requireElement(wrapper, '#registration-start').setValue('12:00')
+    await requireElement(wrapper, '#registration-end').setValue('16:00')
+    await submitForm(wrapper)
+
+    expect(store.state.data.registrations).toHaveLength(2)
+    expect(wrapper.find('#registration-start').exists()).toBe(false)
+  })
+
   it('navigeert naar de detailpagina van de week', async () => {
     seedProfile()
     const wrapper = mountPage(DashboardPage)
 
     await findButton(wrapper, 'Weekdetails').trigger('click')
     expect(currentRoute.value).toEqual({ name: 'week-detail', isoYear: 2026, isoWeek: 42 })
+  })
+
+  it('opent de ziektedialoog en legt ziekte-uren vast voor de huidige week', async () => {
+    const profile = seedProfile()
+    const wrapper = mountPage(DashboardPage)
+
+    await findButton(wrapper, 'Ziekte registreren').trigger('click')
+    expect(requireElement(wrapper, '#sickness-hours').element).toBeInstanceOf(HTMLInputElement)
+
+    await requireElement(wrapper, '#sickness-hours').setValue('7,5')
+    await submitForm(wrapper)
+
+    const ref = getIsoWeek('2026-10-15')
+    expect(findWeekRecord(store.state.data.weeks, profile.id, ref)?.sickMinutes).toBe(450)
+    // Dialoog sluit na het opslaan.
+    expect(wrapper.find('#sickness-hours').exists()).toBe(false)
+  })
+
+  it('toont een Nederlandse foutmelding bij ongeldige ziekte-uren', async () => {
+    seedProfile()
+    const wrapper = mountPage(DashboardPage)
+
+    await findButton(wrapper, 'Ziekte registreren').trigger('click')
+    await requireElement(wrapper, '#sickness-hours').setValue('veel')
+    await submitForm(wrapper)
+
+    expect(wrapper.text()).toContain('Vul de ziekte-uren in als getal')
+    expect(store.state.data.weeks.find((week) => week.sickMinutes !== 0)).toBeUndefined()
+  })
+
+  it('verwijdert ziekte-uren weer met 0', async () => {
+    const profile = seedProfile()
+    const ref = getIsoWeek('2026-10-15')
+    store.setWeekSick(profile.id, ref, 240)
+
+    const wrapper = mountPage(DashboardPage)
+    await findButton(wrapper, 'Ziekte registreren').trigger('click')
+
+    // Bestaande waarde staat als uitgangspunt in het formulier.
+    expect((requireElement(wrapper, '#sickness-hours').element as HTMLInputElement).value).toBe('4')
+
+    await requireElement(wrapper, '#sickness-hours').setValue('0')
+    await submitForm(wrapper)
+
+    expect(findWeekRecord(store.state.data.weeks, profile.id, ref)?.sickMinutes).toBe(0)
+  })
+
+  it('toont ziekte-uren in de contractkaart en verrekent ze in het saldo', () => {
+    const profile = seedProfile()
+    const ref = getIsoWeek('2026-10-15')
+    store.addRegistration(profile.id, { date: '2026-10-12', startTime: '09:00', endTime: '17:00' })
+    store.setWeekSick(profile.id, ref, 480)
+
+    const wrapper = mountPage(DashboardPage)
+    const contractCard = wrapper
+      .findAll('.uw-card')
+      .find((card) => card.text().includes('Uren volgens contract'))
+
+    expect(contractCard?.text()).toContain('Ziekte')
+    // 8u gewerkt + 8u ziekte − 32u contract = −16u.
+    expect(contractCard?.text()).toContain('-16u')
+  })
+
+  it('toont geen ziekteregel zonder ziekte-uren', () => {
+    seedProfile()
+    const wrapper = mountPage(DashboardPage)
+    const contractCard = wrapper
+      .findAll('.uw-card')
+      .find((card) => card.text().includes('Uren volgens contract'))
+
+    expect(contractCard?.text()).not.toContain('Ziekte')
+  })
+
+  it('zet de registratieknop op volle breedte en de weekknoppen even breed', () => {
+    seedProfile()
+    const wrapper = mountPage(DashboardPage)
+
+    const register = findButton(wrapper, 'Uren registreren')
+    expect(register.classes()).toContain('uw-button--primary')
+    expect(register.classes()).toContain('uw-button--block')
+
+    const row = requireElement(wrapper, '.uw-button-row')
+    expect(row.findAll('button').map((item) => item.text())).toEqual(['Weekdetails', 'Ziekte registreren'])
+  })
+
+  it('geeft elke betekenisvolle container een name en id met dezelfde waarde', async () => {
+    seedProfile()
+    const wrapper = mountPage(DashboardPage)
+
+    for (const containerId of [
+      'dashboardPage',
+      'weekHeader',
+      'weekSummary',
+      'weekDaySummary',
+      'weekBalance',
+      'yearBalance',
+      'weekActions',
+      'weekVacation',
+    ]) {
+      requireContainer(wrapper, containerId)
+    }
+    expectUniqueContainerIds(wrapper)
+
+    await findButton(wrapper, 'Uren registreren').trigger('click')
+    requireContainer(wrapper, 'registrationDialog')
+    expectUniqueContainerIds(wrapper)
+
+    await findButton(wrapper, 'Annuleren').trigger('click')
+    await findButton(wrapper, 'Ziekte registreren').trigger('click')
+    requireContainer(wrapper, 'sickness')
+    expectUniqueContainerIds(wrapper)
   })
 
   it('vraagt om een profiel als er geen actief profiel is', () => {

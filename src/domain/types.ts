@@ -38,7 +38,8 @@ export interface Profile {
   contractMinutes: number
   defaultStartTime: TimeOfDay
   defaultEndTime: TimeOfDay
-  theme: ThemeId
+  /** Accentkleur van het profiel als hex-notatie (`#rrggbb`). */
+  accentColor: string
   reminders: ReminderSettings
 }
 
@@ -62,6 +63,8 @@ export interface WeekRecord {
   contractMinutes: number
   /** Vakantiemarkering; effectief contract is dan 0, bedrag blijft bewaard. */
   isVacation: boolean
+  /** Geregistreerde ziekte-uren in minuten; telt mee in het saldo. */
+  sickMinutes: number
 }
 
 /** Alle lokaal opgeslagen appdata. */
@@ -69,6 +72,8 @@ export interface AppData {
   schemaVersion: number
   /** Gedeelde gebruikersnaam voor de hele app. */
   username: string
+  /** App-breed thema, gedeeld door alle profielen. */
+  theme: ThemeId
   profiles: Profile[]
   registrations: Registration[]
   weeks: WeekRecord[]
@@ -77,7 +82,7 @@ export interface AppData {
 }
 
 /** Huidige schemaversie van het opgeslagen formaat. */
-export const SCHEMA_VERSION = 2
+export const SCHEMA_VERSION = 3
 
 /** Uniforme resultaatvorm voor validaties. */
 export type ValidationResult<T> =

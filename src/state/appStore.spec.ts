@@ -26,7 +26,7 @@ const profileInput: NewProfileData = {
   contractMinutes: 1920,
   defaultStartTime: '08:00',
   defaultEndTime: '16:30',
-  theme: 'light',
+  accentColor: '#2563eb',
 }
 
 let storage: MemoryStorage
@@ -95,6 +95,7 @@ describe('weekcontracten', () => {
     const week = store.ensureWeek(profile.id, { isoYear: 2026, isoWeek: 42 })
     expect(week.contractMinutes).toBe(1920)
     expect(week.isVacation).toBe(false)
+    expect(week.sickMinutes).toBe(0)
 
     // Tweemaal aanroepen levert geen tweede record op.
     expect(store.ensureWeek(profile.id, { isoYear: 2026, isoWeek: 42 })).toEqual(week)
@@ -157,6 +158,57 @@ describe('weekcontracten', () => {
     const weeks = store.state.data.weeks.map((week) => week.isoWeek).sort((a, b) => a - b)
     expect(weeks).toContain(2)
     expect(weeks).toContain(42)
+  })
+})
+
+describe('ziekte-uren', () => {
+  it('leg ziekte-uren per week vast en telt ze in het saldo', () => {
+    const profile = store.createProfile(profileInput)
+    const ref = { isoYear: 2026, isoWeek: 42 }
+    store.addRegistration(profile.id, { date: '2026-10-12', startTime: '08:00', endTime: '16:00' })
+
+    store.setWeekSick(profile.id, ref, 480)
+
+    const week = findWeekRecord(store.state.data.weeks, profile.id, ref)
+    expect(week?.sickMinutes).toBe(480)
+
+    const summary = buildWeekSummary(store.state.data, profile, ref)
+    // 480 gewerkt + 480 ziekte − 1920 contract = −960
+    expect(summary.balanceMinutes).toBe(-960)
+  })
+
+  it('verwijdert ziekte-uren bij 0 en clampt negatieve waarden', () => {
+    const profile = store.createProfile(profileInput)
+    const ref = { isoYear: 2026, isoWeek: 42 }
+
+    store.setWeekSick(profile.id, ref, 300)
+    store.setWeekSick(profile.id, ref, 0)
+    expect(findWeekRecord(store.state.data.weeks, profile.id, ref)?.sickMinutes).toBe(0)
+
+    store.setWeekSick(profile.id, ref, -100)
+    expect(findWeekRecord(store.state.data.weeks, profile.id, ref)?.sickMinutes).toBe(0)
+  })
+
+  it('bewaart ziekte-uren in de opslag', () => {
+    const profile = store.createProfile(profileInput)
+    const ref = { isoYear: 2026, isoWeek: 42 }
+    store.setWeekSick(profile.id, ref, 240)
+
+    expect(loadAppData(storage).data.weeks[0]?.sickMinutes).toBe(240)
+  })
+})
+
+describe('app-thema', () => {
+  it('wisselt het thema voor de hele app en bewaart het', () => {
+    store.setTheme('dark')
+    expect(store.state.data.theme).toBe('dark')
+    expect(loadAppData(storage).data.theme).toBe('dark')
+  })
+
+  it('wijzigt de accentkleur van een profiel', () => {
+    const profile = store.createProfile(profileInput)
+    store.updateProfile(profile.id, { accentColor: '#7c3aed' })
+    expect(store.activeProfile.value?.accentColor).toBe('#7c3aed')
   })
 })
 

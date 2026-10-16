@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { parseStoredData } from './parseStoredData'
+import { DEFAULT_ACCENT_COLOR } from '../domain/defaults'
 import { SCHEMA_VERSION, type Profile, type Registration, type WeekRecord } from '../domain/types'
 
 function createProfile(overrides: Partial<Profile> = {}): Profile {
@@ -9,7 +10,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'dark',
+    accentColor: '#7c3aed',
     reminders: { enabled: true, days: [1, 3], time: '07:30' },
     ...overrides,
   }
@@ -27,7 +28,15 @@ function createRegistration(overrides: Partial<Registration> = {}): Registration
 }
 
 function createWeek(overrides: Partial<WeekRecord> = {}): WeekRecord {
-  return { profileId: 'p1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: false, ...overrides }
+  return {
+    profileId: 'p1',
+    isoYear: 2026,
+    isoWeek: 42,
+    contractMinutes: 1920,
+    isVacation: false,
+    sickMinutes: 0,
+    ...overrides,
+  }
 }
 
 function stored(payload: unknown): string {
@@ -48,6 +57,7 @@ describe('parseStoredData', () => {
       stored({
         schemaVersion: SCHEMA_VERSION,
         username: 'Martin',
+        theme: 'dark',
         profiles: [createProfile()],
         registrations: [createRegistration()],
         weeks: [createWeek({ isVacation: true })],
@@ -58,7 +68,9 @@ describe('parseStoredData', () => {
     expect(result.issues).toEqual([])
     expect(result.hasUsableData).toBe(true)
     expect(result.data.username).toBe('Martin')
+    expect(result.data.theme).toBe('dark')
     expect(result.data.profiles).toHaveLength(1)
+    expect(result.data.profiles[0]?.accentColor).toBe('#7c3aed')
     expect(result.data.profiles[0]?.reminders).toEqual({ enabled: true, days: [1, 3], time: '07:30' })
     expect(result.data.registrations).toHaveLength(1)
     expect(result.data.weeks[0]?.isVacation).toBe(true)
@@ -189,6 +201,37 @@ describe('parseStoredData', () => {
     // De pauzevelden worden niet overgenomen; de overige gegevens blijven intact.
     expect(result.data.profiles[0]).toEqual(createProfile())
     expect(result.data.registrations[0]).toEqual(createRegistration())
+  })
+
+  it('migreert thema, ziekte-uren en accentkleur van versie 2 naar 3', () => {
+    const result = parseStoredData(
+      stored({
+        schemaVersion: 2,
+        username: 'Martin',
+        profiles: [{ ...createProfile(), theme: 'dark' }],
+        registrations: [],
+        weeks: [{ profileId: 'p1', isoYear: 2026, isoWeek: 42, contractMinutes: 1920, isVacation: false }],
+        lastProfileId: 'p1',
+      }),
+    )
+
+    expect(result.data.schemaVersion).toBe(SCHEMA_VERSION)
+    // Het app-thema valt terug op de standaard; het profielthema wordt genegeerd.
+    expect(result.data.theme).toBe('system')
+    expect(result.data.profiles[0]).toEqual(createProfile())
+    expect(result.data.weeks[0]?.sickMinutes).toBe(0)
+    expect(result.issues).toEqual([])
+  })
+
+  it('herstelt een ongeldige accentkleur naar de standaard', () => {
+    const result = parseStoredData(
+      stored({
+        profiles: [createProfile({ accentColor: '#zzzzzz' }), createProfile({ id: 'p2', accentColor: '#15803d' })],
+      }),
+    )
+
+    expect(result.data.profiles[0]?.accentColor).toBe(DEFAULT_ACCENT_COLOR)
+    expect(result.data.profiles[1]?.accentColor).toBe('#15803d')
   })
 
   it('herstelt ongeldige herinneringsinstellingen', () => {

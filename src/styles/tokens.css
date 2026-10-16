@@ -4,6 +4,8 @@
  * Alle kleuren, randen en typografie staan hier centraal, zodat de vormgeving
  * later eenvoudig kan worden aangepast zonder de componenten te wijzigen.
  * Het thema wordt gezet via het `data-theme`-attribuut op <html>.
+ * De accentkleur (`--uw-accent`/`--uw-accent-ink`/`--uw-accent-soft`) wordt per
+ * profiel als inline style op <html> gezet (zie `state/useTheme.ts`).
  */
 
 :root {
@@ -14,6 +16,8 @@
   --uw-line: #b7bcc4;
   --uw-accent: #2563eb;
   --uw-accent-ink: #ffffff;
+  /* Accent gemengd met wit (90/10); decor op de accentkleur, zoals in de header. */
+  --uw-accent-soft: #3b73ed;
   --uw-positive: #1f6f43;
   --uw-negative: #8f2f2f;
   --uw-radius: 0.5rem;
@@ -21,6 +25,12 @@
   --uw-font-sans: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
   --uw-font-size-base: 1rem;
   --uw-font-size-small: 0.875rem;
+  --uw-font-size-xs: 0.8125rem;
+  /* Logische typografieschaal: 0.875 → 1 → 1.125 → 1.25 → 1.5 */
+  --uw-font-size-h3: 1rem;
+  --uw-font-size-h2: 1.125rem;
+  --uw-font-size-h1: 1.25rem;
+  --uw-font-size-title: 1.5rem;
   --uw-focus-ring: 2px;
 }
 
@@ -30,8 +40,6 @@
   --uw-ink: #f3f4f6;
   --uw-muted: #9ba1a8;
   --uw-line: #2f3238;
-  --uw-accent: #60a5fa;
-  --uw-accent-ink: #0a0b0d;
   --uw-positive: #7fd0a2;
   --uw-negative: #f0a1a1;
 }

@@ -31,7 +31,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
     reminders: { enabled: true, days: [4], time: '09:00' },
     ...overrides,
   }
@@ -112,7 +112,7 @@ describe('vakantieweken en herinneringen', () => {
       contractMinutes: 1920,
       defaultStartTime: '08:00',
       defaultEndTime: '16:30',
-      theme: 'light',
+      accentColor: '#2563eb',
       reminders: { enabled: true, days: [4], time: '09:00' },
     })
 
@@ -135,7 +135,7 @@ describe('vakantieweken en herinneringen', () => {
       contractMinutes: 1920,
       defaultStartTime: '08:00',
       defaultEndTime: '16:30',
-      theme: 'light',
+      accentColor: '#2563eb',
       reminders: { enabled: true, days: [4], time: '09:00' },
     })
     store.addRegistration(profile.id, { date: '2026-10-15', startTime: '08:00', endTime: '12:00' })
@@ -158,7 +158,7 @@ describe('startReminderScheduler', () => {
       contractMinutes: 1920,
       defaultStartTime: '08:00',
       defaultEndTime: '16:30',
-      theme: 'light',
+      accentColor: '#2563eb',
       reminders: { enabled: true, days: [4], time: '09:00' },
     })
     notifications = []

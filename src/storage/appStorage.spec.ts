@@ -56,7 +56,7 @@ function createProfile(): Profile {
     contractMinutes: 1920,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'light',
+    accentColor: '#2563eb',
     reminders: { enabled: false, days: [], time: '09:00' },
   }
 }
@@ -75,6 +75,13 @@ describe('loadAppData', () => {
     expect(result.data.username).toBe('Martin')
     expect(result.data.profiles[0]?.name).toBe('Bakkerij Jansen')
     expect(result.issues).toEqual([])
+  })
+
+  it('bewaart het app-thema', () => {
+    const storage = new MemoryStorage()
+    saveAppData({ ...createData(), theme: 'dark' }, storage)
+
+    expect(loadAppData(storage).data.theme).toBe('dark')
   })
 
   it('meldt een ontbrekende opslag zonder crash', () => {

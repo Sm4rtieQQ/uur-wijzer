@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { CSV_COLUMNS, exportToCsv, importFromCsv, parseCsv } from './csv'
 import { createEmptyData } from '../storage/parseStoredData'
+import { DEFAULT_ACCENT_COLOR } from '../domain/defaults'
 import { buildWeekSummary } from '../domain/weeks'
 import type { AppData, Profile, Registration, WeekRecord } from '../domain/types'
 import { SCHEMA_VERSION } from '../domain/types'
@@ -12,7 +13,7 @@ function createProfile(overrides: Partial<Profile> = {}): Profile {
     contractMinutes: 1950,
     defaultStartTime: '08:00',
     defaultEndTime: '16:30',
-    theme: 'dark',
+    accentColor: '#7c3aed',
     reminders: { enabled: true, days: [1, 3, 5], time: '07:30' },
     ...overrides,
   }
@@ -30,7 +31,15 @@ function createRegistration(overrides: Partial<Registration> = {}): Registration
 }
 
 function createWeek(overrides: Partial<WeekRecord> = {}): WeekRecord {
-  return { profileId: 'profile-1', isoYear: 2026, isoWeek: 42, contractMinutes: 1950, isVacation: false, ...overrides }
+  return {
+    profileId: 'profile-1',
+    isoYear: 2026,
+    isoWeek: 42,
+    contractMinutes: 1950,
+    isVacation: false,
+    sickMinutes: 0,
+    ...overrides,
+  }
 }
 
 function createData(overrides: Partial<AppData> = {}): AppData {
@@ -52,6 +61,34 @@ function createData(overrides: Partial<AppData> = {}): AppData {
 function withLegacyBreakColumn(csv: string, value: string): string {
   return parseCsv(csv)
     .map((row, index) => [...row, index === 0 ? 'break_minutes' : value].join(','))
+    .join('\r\n')
+}
+
+/**
+ * Bouwt van een huidige export een bestand zoals schemaversie 2 dat maakte:
+ * zonder de kolommen `accent_color` en `sick_hours`, en met het thema op de
+ * profielrijen in plaats van in de meta-rij.
+ */
+function toLegacyV2Csv(csv: string): string {
+  const rows = parseCsv(csv)
+  const header = rows[0] ?? []
+  const recordIndex = header.indexOf('record')
+  const themeIndex = header.indexOf('theme')
+  const dropColumns = ['accent_color', 'sick_hours']
+    .map((column) => header.indexOf(column))
+    .filter((index) => index >= 0)
+    .sort((a, b) => b - a)
+
+  return rows
+    .map((row, rowIndex) => {
+      if (rowIndex === 0) return row.filter((_, index) => !dropColumns.includes(index)).join(',')
+      const copy = [...row]
+      const record = copy[recordIndex] ?? ''
+      // In v2 stond het thema per profiel; de meta-rij liet het veld leeg.
+      if (themeIndex >= 0) copy[themeIndex] = record === 'profile' ? 'light' : ''
+      for (const index of dropColumns) copy.splice(index, 1)
+      return copy.join(',')
+    })
     .join('\r\n')
 }
 
@@ -112,7 +149,7 @@ describe('exportToCsv', () => {
 
   it('is als CSV opnieuw te lezen (rondgaand)', () => {
     const data = createData({
-      profiles: [createProfile(), createProfile({ id: 'profile-2', name: 'Bezorgdienst Piet', theme: 'light' })],
+      profiles: [createProfile(), createProfile({ id: 'profile-2', name: 'Bezorgdienst Piet' })],
       registrations: [createRegistration(), createRegistration({ id: 'registration-2', profileId: 'profile-2' })],
       weeks: [
         createWeek({ isVacation: true }),
@@ -132,6 +169,45 @@ describe('exportToCsv', () => {
     // Vakantieweek van profiel 1 plus twee afwijkende weekcontracten van profiel 2.
     expect(result.data.weeks).toHaveLength(3)
   })
+
+  it('exporteert accentkleur, ziekte-uren en het app-thema in de juiste kolommen', () => {
+    const csv = exportToCsv(
+      createData({
+        theme: 'dark',
+        profiles: [createProfile({ accentColor: '#15803d' })],
+        weeks: [createWeek({ sickMinutes: 240 })],
+      }),
+    )
+
+    const rows = parseCsv(csv)
+    const header = rows[0] ?? []
+    expect(header).toEqual([...CSV_COLUMNS])
+
+    const meta = rows.find((row) => row[0] === 'meta')
+    expect(meta?.[header.indexOf('theme')]).toBe('dark')
+
+    const profile = rows.find((row) => row[0] === 'profile')
+    expect(profile?.[header.indexOf('accent_color')]).toBe('#15803d')
+
+    const week = rows.find((row) => row[0] === 'week')
+    expect(week?.[header.indexOf('sick_hours')]).toBe('4')
+  })
+
+  it('neemt accentkleur, ziekte-uren en thema mee in een rondgaande export/import', () => {
+    const data = createData({
+      theme: 'dark',
+      profiles: [createProfile({ accentColor: '#15803d' })],
+      weeks: [createWeek({ sickMinutes: 240 })],
+    })
+
+    const result = importFromCsv(exportToCsv(data), createEmptyData())
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    expect(result.data.theme).toBe('dark')
+    expect(result.data.profiles[0]?.accentColor).toBe('#15803d')
+    expect(result.data.weeks[0]?.sickMinutes).toBe(240)
+  })
 })
 
 describe('importFromCsv', () => {
@@ -144,7 +220,7 @@ describe('importFromCsv', () => {
     expect(result.summary.importedProfiles).toEqual(['Bakkerij Jansen'])
     expect(result.summary.importedRegistrations).toBe(1)
     expect(result.summary.importedWeeks).toBe(1)
-    expect(result.data.profiles[0]?.theme).toBe('dark')
+    expect(result.data.profiles[0]?.accentColor).toBe('#7c3aed')
     expect(result.data.weeks[0]?.isVacation).toBe(true)
   })
 
@@ -186,6 +262,46 @@ describe('importFromCsv', () => {
       'registration-2',
     ])
     expect(result.summary.skippedProfiles).toEqual(['Bakkerij Jansen'])
+  })
+
+  it('weigert overlappende registraties binnen één profiel', () => {
+    const data = createData({
+      registrations: [
+        createRegistration({ date: '2026-10-12', startTime: '08:00', endTime: '12:00' }),
+        createRegistration({ id: 'registration-2', date: '2026-10-12', startTime: '11:00', endTime: '13:00' }),
+      ],
+    })
+
+    const result = importFromCsv(exportToCsv(data), createEmptyData())
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    expect(result.errors.some((error) => error.includes('overlapt met een registratie van 08:00 tot 12:00'))).toBe(true)
+  })
+
+  it('importeert een bestand van schemaversie 2 zonder de nieuwe kolommen', () => {
+    const csv = toLegacyV2Csv(
+      exportToCsv(
+        createData({
+          theme: 'dark',
+          profiles: [createProfile({ accentColor: '#15803d' })],
+          weeks: [createWeek({ sickMinutes: 240 })],
+        }),
+      ),
+    )
+
+    const existing = createEmptyData()
+    existing.theme = 'dark'
+    const result = importFromCsv(csv, existing)
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+
+    // Ontbrekende accentkleur valt terug op de standaard.
+    expect(result.data.profiles[0]?.accentColor).toBe(DEFAULT_ACCENT_COLOR)
+    // Het ziekte-uren-veld bestaat niet in v2 en wordt 0.
+    expect(result.data.weeks[0]?.sickMinutes).toBe(0)
+    // Het profielthema is app-breed geworden: bestaand thema blijft staan.
+    expect(result.data.theme).toBe('dark')
+    expect(result.summary.warnings.some((warning) => warning.includes('thema'))).toBe(true)
   })
 
   it('wijzigt niets bij een fout in het bestand', () => {

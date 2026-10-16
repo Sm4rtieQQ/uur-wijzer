@@ -22,9 +22,9 @@ De header bevat altijd alle kolommen in deze volgorde:
 
 ```
 record,schema_version,username,profile_id,profile_name,contract_hours,
-default_start_time,default_end_time,theme,reminders_enabled,reminder_days,
-reminder_time,iso_year,iso_week,week_contract_hours,is_vacation,
-registration_id,date,start_time,end_time
+default_start_time,default_end_time,accent_color,theme,reminders_enabled,
+reminder_days,reminder_time,iso_year,iso_week,week_contract_hours,
+is_vacation,sick_hours,registration_id,date,start_time,end_time
 ```
 
 (De regelafbreking hierboven is alleen ter leesbaarheid; in het bestand staat
@@ -43,6 +43,7 @@ Eén rij met bestandsinformatie.
 | --- | --- |
 | `schema_version` | Schema-versie van de export (heel getal > 0) |
 | `username` | Gedeelde gebruikersnaam (mag leeg zijn) |
+| `theme` | App-breed thema: `light`, `dark` of `system` (standaard `system`) |
 
 ### `profile`
 
@@ -55,15 +56,19 @@ Eén rij per profiel.
 | `contract_hours` | Contracturen per week in uren (heel getal of decimaal met punt) |
 | `default_start_time` | Standaard starttijd `HH:mm` |
 | `default_end_time` | Standaard eindtijd `HH:mm` |
-| `theme` | `light`, `dark` of `system` |
+| `accent_color` | Accentkleur van het profiel als hex (`#rrggbb`); standaard `#2563eb` |
 | `reminders_enabled` | `true` of `false` |
 | `reminder_days` | Herinneringsdagen als ISO-weekdagen gescheiden door `\|` (bijv. `1|3|5`, 1 = maandag) |
 | `reminder_time` | Herinneringstijd `HH:mm` |
 
+> Het `theme`-veld stond vóór schemaversie 3 op de profielrij. Dat veld wordt
+> bij het importeren genegeerd (het thema is nu app-breed, zie `meta`); staat er
+> een waarde, dan verschijnt een waarschuwing.
+
 ### `week`
 
-Eén rij per weekrecord (alleen weken met eigen informatie: vakantie of een
-weekcontract dat afwijkt van het profielcontract).
+Eén rij per weekrecord: weken met een vakantiemarkering, een weekcontract dat
+afwijkt van het profielcontract **of** ziekte-uren.
 
 | Kolom | Betekenis |
 | --- | --- |
@@ -72,6 +77,7 @@ weekcontract dat afwijkt van het profielcontract).
 | `iso_week` | ISO-weeknummer (1–53) |
 | `week_contract_hours` | Vastgelegde contracturen voor die week in uren |
 | `is_vacation` | `true` of `false` |
+| `sick_hours` | Ziekte-uren in die week in uren (0–168, decimaal met punt); standaard `0` |
 
 ### `registration`
 
@@ -89,14 +95,18 @@ De gewerkte tijd is de verstreken tijd tussen `start_time` en `end_time`.
 Pauzetijd wordt niet meer ondersteund (schemaversie 2); de gewerkte tijd is
 daarom altijd de volledige tijd tussen start en eind.
 
+Binnen één profiel mogen registraties elkaar op dezelfde dag **niet
+overlappen**; een tijdvak dat een andere registratie van hetzelfde profiel
+overlapt is een fout (aansluitende tijden mogen wel).
+
 ## Voorbeeld
 
 ```csv
-record,schema_version,username,profile_id,profile_name,contract_hours,default_start_time,default_end_time,theme,reminders_enabled,reminder_days,reminder_time,iso_year,iso_week,week_contract_hours,is_vacation,registration_id,date,start_time,end_time
-meta,2,Martin,,,,,,,,,,,,,,,,,
-profile,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,Werkgever A,32.5,09:00,17:00,system,true,1|3|5,08:00,,,,,,,,
-week,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,2026,2,24,true,,,,
-registration,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,,,,,a1b2c3d4-0001-4000-8000-000000000001,2026-01-05,09:00,17:30
+record,schema_version,username,profile_id,profile_name,contract_hours,default_start_time,default_end_time,accent_color,theme,reminders_enabled,reminder_days,reminder_time,iso_year,iso_week,week_contract_hours,is_vacation,sick_hours,registration_id,date,start_time,end_time
+meta,3,Martin,,,,,,,system,,,,,,,,,,,,
+profile,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,Werkgever A,32.5,09:00,17:00,#2563eb,,true,1|3|5,08:00,,,,,,,,,
+week,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,2026,2,24,true,0,,,,,
+registration,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,,,,,,,a1b2c3d4-0001-4000-8000-000000000001,2026-01-05,09:00,17:30
 ```
 
 ## Importregels
@@ -104,13 +114,18 @@ registration,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,,,,,a1b2c3d4-0001-40
 - Het hele bestand wordt **eerst gevalideerd** vóór toepassen. Bij één fout
   wordt niets gewijzigd en verschijnt een Nederlandse foutmelding (maximaal 25
   fouten getoond, plus een telling van de rest).
-- Alle verplichte kolommen moeten aanwezig zijn in de header.
+- Alle verplichte kolommen moeten aanwezig zijn in de header. De kolommen
+  `accent_color` en `sick_hours` zijn **optioneel**: ontbreken ze (bestanden van
+  vóór schemaversie 3), dan gelden de standaardwaarde `#2563eb` respectievelijk
+  0 ziekte-uren.
 - `schema_version` nieuwer dan de ondersteunde versie → import geweigerd.
 - **Profielen:** een profiel met een bestaande `profile_id` wordt overgeslagen
   (met melding), inclusief bijbehorende weken en registraties. Dubbele
   `profile_id`'s binnen het bestand zijn een fout.
 - **Registraties:** een registratie met een bestaande `registration_id` wordt
   overgeslagen. Dubbele `registration_id`'s binnen het bestand zijn een fout.
+  Registraties die op dezelfde dag een andere registratie van hetzelfde profiel
+  overlappen (bestaand of elders in hetzelfde bestand) zijn een fout.
 - **Weken:** een week met dezelfde sleutel (`profile_id` + `iso_year` +
   `iso_week`) bestaat al → overslaan. Weken/registraties die bij een onbekend
   profiel horen zijn een fout.
@@ -119,6 +134,9 @@ registration,,,7f9c1f2e-1a2b-4c3d-8e4f-0123456789ab,,,,,,,,,,,,,a1b2c3d4-0001-40
 - Extra kolommen uit oudere versies (`default_break_minutes`, `break_minutes`)
   worden genegeerd. Staan er daadwerkelijk pauzetijden in, dan verschijnt een
   waarschuwing; de gewerkte tijd is dan de volledige tijd tussen start en eind.
+- Een gevulde `theme`-kolom op profielrijen (schemaversie 2 en ouder) wordt
+  genegeerd met een waarschuwing: het thema is nu app-breed en staat in de
+  `meta`-rij.
 - De gebruikersnaam wordt alleen overgenomen als er nog geen naam is ingesteld;
   anders verschijnt een waarschuwing.
 - Import is daarmee **idempotent**: hetzelfde bestand nogmaals importeren

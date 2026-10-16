@@ -4,10 +4,10 @@ import ProfileForm from '../components/ProfileForm.vue'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
 import { useAppStore } from '../state/appStore'
 import { navigate } from '../router/router'
-import { WEEKDAY_LONG_LABELS } from '../domain/defaults'
+import { THEME_OPTIONS, WEEKDAY_LONG_LABELS } from '../domain/defaults'
 import { minutesToHours } from '../domain/time'
 import { validateReminderSettings, type ValidatedProfile } from '../domain/validation'
-import type { IsoWeekday } from '../domain/types'
+import type { IsoWeekday, ThemeId } from '../domain/types'
 import { exportToCsv } from '../services/csv'
 import { downloadTextFile } from '../services/fileTransfer'
 import { createBrowserNotifier } from '../services/reminderScheduler'
@@ -17,6 +17,7 @@ const store = useAppStore()
 const profile = computed(() => store.activeProfile.value)
 
 const usernameDraft = ref(store.state.data.username)
+const themeDraft = ref<ThemeId>(store.state.data.theme)
 const generalNotice = ref('')
 
 const profileNotice = ref('')
@@ -57,9 +58,11 @@ const weekdays: ReadonlyArray<{ day: IsoWeekday; label: string }> = WEEKDAY_LONG
   label,
 }))
 
-function saveUsername(): void {
+function saveGeneral(): void {
   store.setUsername(usernameDraft.value)
-  generalNotice.value = usernameDraft.value.trim() === '' ? 'Vul een gebruikersnaam in.' : 'Gebruikersnaam opgeslagen.'
+  store.setTheme(themeDraft.value)
+  generalNotice.value =
+    usernameDraft.value.trim() === '' ? 'Vul een gebruikersnaam in.' : 'Algemene instellingen opgeslagen.'
 }
 
 function saveProfile(validated: ValidatedProfile): void {
@@ -129,22 +132,31 @@ function deleteProfile(): void {
 </script>
 
 <template>
-  <div v-if="!profile" class="uw-page">
+  <div v-if="!profile" class="uw-page" name="settingsNoProfile" id="settingsNoProfile">
     <p>Er is geen actief profiel. Kies eerst een profiel.</p>
     <button type="button" class="uw-button uw-button--primary" @click="navigate({ name: 'profiles' })">
       Naar profielkeuze
     </button>
   </div>
 
-  <div v-else class="uw-page">
+  <div v-else class="uw-page" name="settingsPage" id="settingsPage">
     <h1>Instellingen</h1>
 
-    <section class="uw-card">
-      <h2>Algemeen</h2>
-      <form class="uw-stack" novalidate @submit.prevent="saveUsername">
+    <section class="uw-card" name="generalSettings" id="generalSettings">
+      <div class="uw-row">
+        <h2>Algemeen</h2>
+        <p class="uw-meta">Voor hele app</p>
+      </div>
+      <form class="uw-stack" name="generalForm" id="generalForm" novalidate @submit.prevent="saveGeneral">
         <div class="uw-field">
-          <label for="settings-username">Gebruikersnaam (voor de hele app)</label>
+          <label for="settings-username">Gebruikersnaam</label>
           <input id="settings-username" v-model="usernameDraft" class="uw-input" type="text" autocomplete="name" />
+        </div>
+        <div class="uw-field">
+          <label for="settings-theme">Thema</label>
+          <select id="settings-theme" v-model="themeDraft" class="uw-select">
+            <option v-for="theme in THEME_OPTIONS" :key="theme.id" :value="theme.id">{{ theme.label }}</option>
+          </select>
         </div>
         <div class="uw-row" style="justify-content: flex-start">
           <button type="submit" class="uw-button uw-button--primary">Opslaan</button>
@@ -153,7 +165,7 @@ function deleteProfile(): void {
       </form>
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="profileSettings" id="profileSettings">
       <h2>Profiel: {{ profile.name }}</h2>
       <ProfileForm
         :key="profile.id"
@@ -161,7 +173,7 @@ function deleteProfile(): void {
         :initial-contract-hours="String(minutesToHours(profile.contractMinutes))"
         :initial-start-time="profile.defaultStartTime"
         :initial-end-time="profile.defaultEndTime"
-        :initial-theme="profile.theme"
+        :initial-accent-color="profile.accentColor"
         submit-label="Profiel opslaan"
         @submit="saveProfile"
         @cancel="navigate({ name: 'dashboard' })"
@@ -169,7 +181,7 @@ function deleteProfile(): void {
       <p v-if="profileNotice" class="uw-meta" role="status">{{ profileNotice }}</p>
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="reminderSettings" id="reminderSettings">
       <h2>Notificaties</h2>
       <p class="uw-meta">Stuurt een notificatie als op de aangegeven dag geen uren zijn geregistreerd.</p>
 
@@ -178,7 +190,12 @@ function deleteProfile(): void {
         Notificaties inschakelen
       </label>
 
-      <fieldset v-if="reminderDraft.enabled" style="border: 0; padding: 0; margin: 0">
+      <fieldset
+        v-if="reminderDraft.enabled"
+        name="reminderDays"
+        id="reminderDays"
+        style="border: 0; padding: 0; margin: 0"
+      >
         <legend class="uw-legend">Werkdagen</legend>
         <div class="uw-stack">
           <label v-for="weekday in weekdays" :key="weekday.day" class="uw-checkbox-row">
@@ -214,7 +231,7 @@ function deleteProfile(): void {
       <p class="uw-meta">Let op! In een vakantieweek worden geen meldingen verstuurd!</p>
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="csvBackup" id="csvBackup">
       <h2>Back-up (CSV)</h2>
       <p class="uw-meta">
         De export bevat alle profielen met hun weekgegevens en registraties. Importeren doe je op de profielpagina.
@@ -224,7 +241,7 @@ function deleteProfile(): void {
       </div>
     </section>
 
-    <section class="uw-card">
+    <section class="uw-card" name="deleteProfile" id="deleteProfile">
       <h2>Profiel verwijderen</h2>
       <p class="uw-meta">
         Hiermee verwijder je dit profiel met alle registraties en weekgegevens. Andere profielen blijven bestaan.
@@ -236,6 +253,7 @@ function deleteProfile(): void {
 
     <ConfirmDialog
       :open="deleteDialogOpen"
+      dialog-id="deleteProfileDialog"
       title="Profiel verwijderen"
       :message="`Typ de profielnaam over om het profiel definitief te verwijderen.`"
       :required-text="profile.name"
